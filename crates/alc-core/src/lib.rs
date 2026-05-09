@@ -143,6 +143,58 @@ pub enum DaemonRequest {
     Ping,
     Manifest,
     BenchSummary { samples: Vec<f64> },
+    Input { steps: Vec<InputStep> },
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "action", rename_all = "kebab-case")]
+pub enum InputStep {
+    Move {
+        dx: i32,
+        dy: i32,
+    },
+    Goto {
+        x: i32,
+        y: i32,
+    },
+    Click {
+        #[serde(default)]
+        button: Option<String>,
+        #[serde(default)]
+        x: Option<i32>,
+        #[serde(default)]
+        y: Option<i32>,
+        #[serde(default)]
+        delay_ms: Option<u64>,
+    },
+    Scroll {
+        vertical: i32,
+        #[serde(default)]
+        horizontal: Option<i32>,
+    },
+    Key {
+        name: String,
+    },
+    Hotkey {
+        chord: String,
+    },
+    Type {
+        text: String,
+    },
+}
+
+impl InputStep {
+    pub fn action_name(&self) -> &'static str {
+        match self {
+            Self::Move { .. } => "move",
+            Self::Goto { .. } => "goto",
+            Self::Click { .. } => "click",
+            Self::Scroll { .. } => "scroll",
+            Self::Key { .. } => "key",
+            Self::Hotkey { .. } => "hotkey",
+            Self::Type { .. } => "type",
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -157,17 +209,31 @@ pub struct DaemonResponse {
 }
 
 pub fn handle_daemon_request(envelope: DaemonEnvelope) -> DaemonResponse {
-    let result = match envelope.request {
-        DaemonRequest::Ping => serde_json::json!({"pong": true, "v": VERSION}),
-        DaemonRequest::Manifest => {
-            serde_json::to_value(brief_manifest()).expect("manifest serializes")
+    let id = envelope.id;
+    match envelope.request {
+        DaemonRequest::Ping => {
+            success_response(id, serde_json::json!({"pong": true, "v": VERSION}))
         }
-        DaemonRequest::BenchSummary { samples } => {
-            serde_json::to_value(benchmark_summary(&samples)).expect("summary serializes")
-        }
-    };
+        DaemonRequest::Manifest => success_response(
+            id,
+            serde_json::to_value(brief_manifest()).expect("manifest serializes"),
+        ),
+        DaemonRequest::BenchSummary { samples } => success_response(
+            id,
+            serde_json::to_value(benchmark_summary(&samples)).expect("summary serializes"),
+        ),
+        DaemonRequest::Input { .. } => DaemonResponse {
+            id,
+            ok: false,
+            result: None,
+            error: Some("input requires daemon runtime".to_string()),
+        },
+    }
+}
+
+fn success_response(id: Option<String>, result: serde_json::Value) -> DaemonResponse {
     DaemonResponse {
-        id: envelope.id,
+        id,
         ok: true,
         result: Some(result),
         error: None,
@@ -235,5 +301,37 @@ mod tests {
         let response = handle_daemon_request(request);
         assert_eq!(response.id.as_deref(), Some("b1"));
         assert_eq!(response.result.unwrap()["avg_ms"], 20.0);
+    }
+
+    #[test]
+    fn daemon_input_request_parses_batch() {
+        let request: DaemonEnvelope = serde_json::from_str(
+            r#"{"id":"i1","cmd":"input","steps":[{"action":"move","dx":2,"dy":-3},{"action":"key","name":"esc"}]}"#,
+        )
+        .unwrap();
+        match request.request {
+            DaemonRequest::Input { steps } => {
+                assert_eq!(steps.len(), 2);
+                assert_eq!(steps[0].action_name(), "move");
+                assert_eq!(steps[1].action_name(), "key");
+            }
+            other => panic!("unexpected request: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn core_rejects_input_without_daemon_runtime() {
+        let response = handle_daemon_request(DaemonEnvelope {
+            id: Some("i1".to_string()),
+            request: DaemonRequest::Input {
+                steps: vec![InputStep::Move { dx: 1, dy: 1 }],
+            },
+        });
+        assert!(!response.ok);
+        assert_eq!(response.id.as_deref(), Some("i1"));
+        assert_eq!(
+            response.error.as_deref(),
+            Some("input requires daemon runtime")
+        );
     }
 }

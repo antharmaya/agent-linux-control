@@ -27,5 +27,7 @@ Conclusion: use app-native APIs for actual creative work. Use desktop control fo
 - 5-run observe avg earlier: ~1347 ms.
 - Separate uinput setup/action: ~826 ms per action.
 - 3 consecutive moves in one `sequence --brief`: ~918 ms total.
+- Rust daemon input over one long-lived socket: first call ~51.2 ms with a 50 ms smoke device delay, then warm calls averaged ~0.38 ms.
+- Python per-action uinput rerun after daemon benchmark: ~827.57 ms average across 3 moves.
 
-Conclusion: Rust not required for Blender logic. Biggest control win is persistent input device or daemon. `sequence` reuse already proves this.
+Conclusion: Rust not required for Blender logic. Biggest control win is persistent input device or daemon. The Rust daemon result validates this: warm input dispatch is sub-millisecond on the local socket before compositor/UI effects.

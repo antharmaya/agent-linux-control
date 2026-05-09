@@ -27,6 +27,7 @@ dependencies = [
  "alc-core",
  "anyhow",
  "clap",
+ "serde",
  "serde_json",
 ]
 

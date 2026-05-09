@@ -10,7 +10,7 @@
 | Perception | Capture screen state and change over time | `observe`, `watch`, `wait-change` |
 | Actuation | Move pointer, click, type, paste, scroll, launch apps | `click`, `type`, `paste`, `browser`, `sequence` |
 | Integration | Let agents call the same controls through structured tools | `mcp`, installed skills |
-| Realtime daemon | Keep input devices, watch state, and protocol dispatch warm | Rust `alc-daemon` prototype |
+| Realtime daemon | Keep input devices, watch state, and protocol dispatch warm | Rust `alc-daemon` with daemon-owned uinput |
 | Journal | Preserve privacy-safe event traces for recovery and review | `journal` |
 | Brain map | Turn capabilities and validation into a graph workspace | `brain export` for Obsidian |
 | Token economy | Keep repeated agent loops compact and fast | `--brief`, compact skill text |
@@ -42,7 +42,7 @@ This project should implement those ideas as portable Linux infrastructure rathe
 ## Next First-Class Upgrades
 
 1. Move realtime core to Rust: `alc-core`, `alc`, `alc-daemon`.
-2. Add persistent uinput ownership to the daemon.
+2. Add Python CLI delegation to the Rust daemon.
 3. Add workspace isolation: nested compositor, VNC/xpra, app-native adapters.
 4. Add dialog detection/recipes for app modals.
 5. Add window/app discovery: `window-list`, `active-window`, `focus`.

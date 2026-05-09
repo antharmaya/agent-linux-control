@@ -27,11 +27,14 @@ Goal: make Linux desktop control feel realtime without wasting model context.
 | `bench observe --count 1 --brief` | ~994 ms |
 | Separate uinput action avg | ~826 ms/action |
 | 3 input actions in one `sequence --brief` | ~918 ms total |
+| Rust daemon first input call | ~51.2 ms with 50 ms smoke device delay |
+| Rust daemon warm input call over one socket | ~0.38 ms avg |
+| Python per-action uinput after daemon benchmark | ~827.57 ms avg |
 | Blender background startup + script | ~2.09 s wall |
 | Blender cube/material scene ops after startup | ~50.81 ms |
 | Blender UI first visible change | ~1.96 s |
 
-Interpretation: app-native APIs are fast once app is loaded. Current bottlenecks are screenshot capture, per-process startup, and per-device input setup. Batching input actions is already a large win.
+Interpretation: app-native APIs are fast once app is loaded. Current bottlenecks are screenshot capture, per-process startup, and per-device input setup. Batching input actions is already a large win. Rust daemon-owned input removes the device setup cost almost entirely once warm.
 
 ## Rust Pivot
 
@@ -50,7 +53,7 @@ Keep Python stdlib CLI as stable installer path until Rust reaches command parit
 
 Short term: Rust core models + CLI prototype, Python compatibility, batching, app-native adapters, isolated workspaces.
 
-Medium term: Rust daemon. The first daemon now exists with a small typed protocol; next target is moving persistent uinput and watch/diff state into it. Rust is a strong fit for persistent uinput, event loop, socket protocol, and high-frequency watch/diff. Python remains fallback control plane.
+Medium term: Rust daemon. The daemon now owns a lazy persistent uinput device and a small typed protocol; next target is CLI delegation plus watch/diff state. Rust is a strong fit for persistent uinput, event loop, socket protocol, and high-frequency watch/diff. Python remains fallback control plane.
 
 ## Benchmarks To Add
 

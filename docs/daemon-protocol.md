@@ -29,6 +29,7 @@ Call it:
 cargo run -q -p alc-daemon -- call --socket /tmp/agent-linux-control.sock '{"id":"p1","cmd":"ping"}'
 cargo run -q -p alc-daemon -- call --socket /tmp/agent-linux-control.sock '{"id":"m1","cmd":"manifest"}'
 cargo run -q -p alc-daemon -- call --socket /tmp/agent-linux-control.sock '{"id":"b1","cmd":"bench-summary","samples":[10,20,30]}'
+cargo run -q -p alc-daemon -- call --socket /tmp/agent-linux-control.sock '{"id":"i1","cmd":"input","steps":[{"action":"move","dx":1,"dy":1}]}'
 ```
 
 ## Current Commands
@@ -38,6 +39,24 @@ cargo run -q -p alc-daemon -- call --socket /tmp/agent-linux-control.sock '{"id"
 | `ping` | Liveness check with daemon/core version |
 | `manifest` | Compact capability contract |
 | `bench-summary` | Shared benchmark math over sample milliseconds |
+| `input` | Batch OS input actions through daemon-owned `/dev/uinput` |
+
+## Input Steps
+
+`input` accepts a `steps` array. Supported actions:
+
+```json
+{"action":"move","dx":1,"dy":1}
+{"action":"goto","x":900,"y":600}
+{"action":"click","button":"left"}
+{"action":"click","button":"left","x":900,"y":600,"delay_ms":50}
+{"action":"scroll","vertical":-3,"horizontal":0}
+{"action":"key","name":"esc"}
+{"action":"hotkey","chord":"ctrl+l"}
+{"action":"type","text":"hello"}
+```
+
+The daemon lazily opens `/dev/uinput` on first input command and keeps that virtual device alive for later requests.
 
 ## Response Shape
 
@@ -55,8 +74,7 @@ Error:
 
 ## Near-Term Expansion
 
-1. Move `/dev/uinput` ownership into the daemon.
-2. Add `observe`, `click`, `key`, `paste`, `sequence`, and `watch` commands.
-3. Keep screenshot capture, diffing, journal, and input queues warm.
-4. Let the Python CLI delegate to the daemon when available and fall back to stdlib behavior otherwise.
-5. Put MCP on top of the same protocol so Codex, Claude Code, Gemini CLI, OpenCode, Goose, Qwen, and other agents see one consistent control surface.
+1. Add `observe`, `paste`, `sequence`, and `watch` commands.
+2. Keep screenshot capture, diffing, journal, and input queues warm.
+3. Let the Python CLI delegate to the daemon when available and fall back to stdlib behavior otherwise.
+4. Put MCP on top of the same protocol so Codex, Claude Code, Gemini CLI, OpenCode, Goose, Qwen, and other agents see one consistent control surface.

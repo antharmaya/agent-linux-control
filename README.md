@@ -56,6 +56,7 @@ cargo run -q -p alc -- manifest --compact
 cargo run -q -p alc -- bench-summary 10 20 30
 cargo run -q -p alc-daemon -- serve --socket /tmp/agent-linux-control.sock
 cargo run -q -p alc-daemon -- call --socket /tmp/agent-linux-control.sock '{"id":"p1","cmd":"ping"}'
+cargo run -q -p alc-daemon -- call --socket /tmp/agent-linux-control.sock '{"id":"i1","cmd":"input","steps":[{"action":"move","dx":1,"dy":1}]}'
 ./scripts/rust-smoke.sh
 ```
 
