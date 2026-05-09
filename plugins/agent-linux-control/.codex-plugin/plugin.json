@@ -1,0 +1,42 @@
+{
+  "name": "agent-linux-control",
+  "version": "0.1.0",
+  "description": "Linux desktop-control toolkit for coding agents: screenshots, mouse, keyboard, clipboard, browser-target checks, and readiness checks.",
+  "author": {
+    "name": "Antharmaya Labs",
+    "email": "hello@antharmaya.com",
+    "url": "https://github.com/antharmaya-labs"
+  },
+  "homepage": "https://github.com/antharmaya-labs/agent-linux-control",
+  "repository": "https://github.com/antharmaya-labs/agent-linux-control",
+  "license": "MIT",
+  "keywords": [
+    "linux",
+    "desktop-control",
+    "wayland",
+    "coding-agents"
+  ],
+  "skills": "./skills",
+  "interface": {
+    "displayName": "Agent Linux Control",
+    "shortDescription": "Let coding agents operate Linux desktops through one CLI.",
+    "longDescription": "Installs a Linux desktop-control command and skill so Codex, Claude Code, Gemini CLI, OpenCode, and other agents can capture screens, move/click/type, scroll, use clipboard, test Zen/browser workflows, and verify readiness on Fedora-like, Debian-like, Arch-like, Alpine, and Raspberry Pi/ARM Linux systems.",
+    "developerName": "Antharmaya Labs",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive",
+      "Desktop Control",
+      "Screenshots",
+      "Automation"
+    ],
+    "websiteURL": "https://github.com/antharmaya-labs/agent-linux-control",
+    "privacyPolicyURL": "https://github.com/antharmaya-labs/agent-linux-control",
+    "termsOfServiceURL": "https://github.com/antharmaya-labs/agent-linux-control",
+    "defaultPrompt": [
+      "Check whether this Linux desktop is ready for OS-level control.",
+      "Capture the screen, inspect it, then click the focused app safely.",
+      "Install the Linux control helper and skill for this agent."
+    ],
+    "brandColor": "#2563EB"
+  }
+}

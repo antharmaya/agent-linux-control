@@ -1,0 +1,517 @@
+#!/usr/bin/env python3
+"""Linux desktop control helper for coding agents.
+
+Targets Wayland-first desktops while keeping X11 fallbacks. The input backend
+uses /dev/uinput directly so it does not depend on ydotoold being running.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import shutil
+import subprocess
+import sys
+import time
+import struct
+import fcntl
+from pathlib import Path
+
+EV_SYN = 0x00
+EV_KEY = 0x01
+EV_REL = 0x02
+SYN_REPORT = 0
+
+REL_X = 0x00
+REL_Y = 0x01
+REL_WHEEL = 0x08
+REL_HWHEEL = 0x06
+
+BTN_LEFT = 0x110
+BTN_RIGHT = 0x111
+BTN_MIDDLE = 0x112
+
+BUS_USB = 0x03
+
+KEY_LEFTCTRL = 29
+KEY_LEFTSHIFT = 42
+KEY_LEFTALT = 56
+KEY_LEFTMETA = 125
+KEY_ENTER = 28
+KEY_SPACE = 57
+KEY_TAB = 15
+KEY_BACKSPACE = 14
+KEY_ESC = 1
+KEY_DELETE = 111
+KEY_HOME = 102
+KEY_END = 107
+KEY_PAGEUP = 104
+KEY_PAGEDOWN = 109
+KEY_UP = 103
+KEY_DOWN = 108
+KEY_LEFT = 105
+KEY_RIGHT = 106
+
+KEYS = {
+    "a": 30,
+    "b": 48,
+    "c": 46,
+    "d": 32,
+    "e": 18,
+    "f": 33,
+    "g": 34,
+    "h": 35,
+    "i": 23,
+    "j": 36,
+    "k": 37,
+    "l": 38,
+    "m": 50,
+    "n": 49,
+    "o": 24,
+    "p": 25,
+    "q": 16,
+    "r": 19,
+    "s": 31,
+    "t": 20,
+    "u": 22,
+    "v": 47,
+    "w": 17,
+    "x": 45,
+    "y": 21,
+    "z": 44,
+    "1": 2,
+    "2": 3,
+    "3": 4,
+    "4": 5,
+    "5": 6,
+    "6": 7,
+    "7": 8,
+    "8": 9,
+    "9": 10,
+    "0": 11,
+    "-": 12,
+    "=": 13,
+    "[": 26,
+    "]": 27,
+    "\\": 43,
+    ";": 39,
+    "'": 40,
+    "`": 41,
+    ",": 51,
+    ".": 52,
+    "/": 53,
+    " ": KEY_SPACE,
+    "\n": KEY_ENTER,
+    "\t": KEY_TAB,
+}
+
+for i in range(1, 13):
+    KEYS[f"f{i}"] = 58 + i
+
+SHIFTED = {
+    "!": "1",
+    "@": "2",
+    "#": "3",
+    "$": "4",
+    "%": "5",
+    "^": "6",
+    "&": "7",
+    "*": "8",
+    "(": "9",
+    ")": "0",
+    "_": "-",
+    "+": "=",
+    "{": "[",
+    "}": "]",
+    "|": "\\",
+    ":": ";",
+    '"': "'",
+    "~": "`",
+    "<": ",",
+    ">": ".",
+    "?": "/",
+}
+
+NAMED_KEYS = {
+    "enter": KEY_ENTER,
+    "return": KEY_ENTER,
+    "space": KEY_SPACE,
+    "tab": KEY_TAB,
+    "backspace": KEY_BACKSPACE,
+    "esc": KEY_ESC,
+    "escape": KEY_ESC,
+    "delete": KEY_DELETE,
+    "del": KEY_DELETE,
+    "home": KEY_HOME,
+    "end": KEY_END,
+    "pageup": KEY_PAGEUP,
+    "pagedown": KEY_PAGEDOWN,
+    "up": KEY_UP,
+    "down": KEY_DOWN,
+    "left": KEY_LEFT,
+    "right": KEY_RIGHT,
+    "ctrl": KEY_LEFTCTRL,
+    "control": KEY_LEFTCTRL,
+    "shift": KEY_LEFTSHIFT,
+    "alt": KEY_LEFTALT,
+    "meta": KEY_LEFTMETA,
+    "super": KEY_LEFTMETA,
+    "cmd": KEY_LEFTMETA,
+    "win": KEY_LEFTMETA,
+}
+NAMED_KEYS.update({name: code for name, code in KEYS.items() if len(name) > 1})
+
+BUTTONS = {
+    "left": BTN_LEFT,
+    "right": BTN_RIGHT,
+    "middle": BTN_MIDDLE,
+}
+
+
+def ioctl_iow(type_char: str, number: int, size: int) -> int:
+    ioc_nrbits = 8
+    ioc_typebits = 8
+    ioc_sizebits = 14
+    ioc_nrshift = 0
+    ioc_typeshift = ioc_nrshift + ioc_nrbits
+    ioc_sizeshift = ioc_typeshift + ioc_typebits
+    ioc_dirshift = ioc_sizeshift + ioc_sizebits
+    ioc_write = 1
+    return (
+        (ioc_write << ioc_dirshift)
+        | (size << ioc_sizeshift)
+        | (ord(type_char) << ioc_typeshift)
+        | (number << ioc_nrshift)
+    )
+
+
+UI_DEV_CREATE = 0x5501
+UI_DEV_DESTROY = 0x5502
+UI_DEV_SETUP = ioctl_iow("U", 3, struct.calcsize("HHHH80sI"))
+UI_SET_EVBIT = ioctl_iow("U", 100, struct.calcsize("i"))
+UI_SET_KEYBIT = ioctl_iow("U", 101, struct.calcsize("i"))
+UI_SET_RELBIT = ioctl_iow("U", 102, struct.calcsize("i"))
+
+
+class UInput:
+    def __init__(self) -> None:
+        self.fd = os.open("/dev/uinput", os.O_WRONLY | os.O_NONBLOCK)
+        self.created = False
+        self._setup()
+
+    def _setbit(self, request: int, value: int) -> None:
+        fcntl.ioctl(self.fd, request, value)
+
+    def _setup(self) -> None:
+        self._setbit(UI_SET_EVBIT, EV_KEY)
+        self._setbit(UI_SET_EVBIT, EV_REL)
+        for code in (REL_X, REL_Y, REL_WHEEL, REL_HWHEEL):
+            self._setbit(UI_SET_RELBIT, code)
+        key_codes = set(BUTTONS.values())
+        key_codes.update(KEYS.values())
+        key_codes.update(NAMED_KEYS.values())
+        key_codes.update((KEY_LEFTCTRL, KEY_LEFTSHIFT, KEY_LEFTALT, KEY_LEFTMETA))
+        for code in sorted(key_codes):
+            self._setbit(UI_SET_KEYBIT, code)
+        name = b"agent-linux-control"
+        setup = struct.pack("HHHH80sI", BUS_USB, 0x4C43, 0x0001, 0x0001, name, 0)
+        fcntl.ioctl(self.fd, UI_DEV_SETUP, setup)
+        fcntl.ioctl(self.fd, UI_DEV_CREATE)
+        self.created = True
+        time.sleep(float(os.environ.get("AGENT_LINUX_CONTROL_DEVICE_DELAY", "0.65")))
+
+    def event(self, ev_type: int, code: int, value: int) -> None:
+        os.write(self.fd, struct.pack("llHHi", 0, 0, ev_type, code, value))
+
+    def sync(self) -> None:
+        self.event(EV_SYN, SYN_REPORT, 0)
+
+    def move(self, dx: int, dy: int) -> None:
+        if dx:
+            self.event(EV_REL, REL_X, dx)
+        if dy:
+            self.event(EV_REL, REL_Y, dy)
+        self.sync()
+
+    def goto(self, x: int, y: int) -> None:
+        self.move(-100000, -100000)
+        time.sleep(0.05)
+        self.move(x, y)
+
+    def scroll(self, vertical: int, horizontal: int = 0) -> None:
+        if vertical:
+            self.event(EV_REL, REL_WHEEL, vertical)
+        if horizontal:
+            self.event(EV_REL, REL_HWHEEL, horizontal)
+        self.sync()
+
+    def key(self, code: int, down: bool) -> None:
+        self.event(EV_KEY, code, 1 if down else 0)
+        self.sync()
+
+    def tap(self, code: int) -> None:
+        self.key(code, True)
+        time.sleep(0.03)
+        self.key(code, False)
+
+    def click(self, button: str) -> None:
+        self.tap(BUTTONS[button])
+
+    def hotkey(self, keys: list[int]) -> None:
+        if not keys:
+            return
+        for code in keys[:-1]:
+            self.key(code, True)
+            time.sleep(0.02)
+        self.tap(keys[-1])
+        for code in reversed(keys[:-1]):
+            self.key(code, False)
+            time.sleep(0.02)
+
+    def type_text(self, text: str) -> None:
+        for ch in text:
+            shift = False
+            key_char = ch
+            if "A" <= ch <= "Z":
+                shift = True
+                key_char = ch.lower()
+            elif ch in SHIFTED:
+                shift = True
+                key_char = SHIFTED[ch]
+            code = KEYS.get(key_char)
+            if code is None:
+                raise SystemExit(f"unsupported character for typing: {ch!r}")
+            if shift:
+                self.key(KEY_LEFTSHIFT, True)
+            self.tap(code)
+            if shift:
+                self.key(KEY_LEFTSHIFT, False)
+            time.sleep(0.015)
+
+    def close(self) -> None:
+        if self.created:
+            time.sleep(0.15)
+            fcntl.ioctl(self.fd, UI_DEV_DESTROY)
+            self.created = False
+        os.close(self.fd)
+
+    def __enter__(self) -> "UInput":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self.close()
+
+
+def run(cmd: list[str], check: bool = True) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(cmd, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=check)
+
+
+def have(name: str) -> bool:
+    return shutil.which(name) is not None
+
+
+def session_type() -> str:
+    return os.environ.get("XDG_SESSION_TYPE", "")
+
+
+def desktop() -> str:
+    return os.environ.get("XDG_CURRENT_DESKTOP", "")
+
+
+def package_manager() -> str | None:
+    for name in ("dnf", "apt-get", "pacman", "zypper", "apk", "yum"):
+        if have(name):
+            return name
+    return None
+
+
+def screenshot(args: argparse.Namespace) -> None:
+    out = Path(args.output).expanduser().resolve()
+    out.parent.mkdir(parents=True, exist_ok=True)
+    commands: list[list[str]] = []
+    if have("spectacle"):
+        cmd = ["spectacle", "-b", "-n", "-o", str(out)]
+        if args.pointer:
+            cmd.insert(3, "-p")
+        commands.append(cmd)
+    if session_type() == "wayland" and have("grim"):
+        commands.append(["grim", str(out)])
+    if have("gnome-screenshot"):
+        commands.append(["gnome-screenshot", "-f", str(out)])
+    if have("scrot"):
+        commands.append(["scrot", str(out)])
+    if have("maim"):
+        commands.append(["maim", str(out)])
+    if have("import") and os.environ.get("DISPLAY"):
+        commands.append(["import", "-window", "root", str(out)])
+    errors: list[str] = []
+    for cmd in commands:
+        proc = subprocess.run(cmd, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if proc.returncode == 0 and out.exists() and out.stat().st_size > 0:
+            print(str(out))
+            return
+        errors.append(f"{cmd[0]}: {proc.stderr.strip() or proc.stdout.strip() or proc.returncode}")
+    raise SystemExit("screenshot failed; tried: " + "; ".join(errors or ["no screenshot tools found"]))
+
+
+def clipboard_set(text: str) -> None:
+    if session_type() == "wayland" and have("wl-copy"):
+        subprocess.run(["wl-copy"], input=text, text=True, check=True)
+        return
+    if have("xclip"):
+        subprocess.run(["xclip", "-selection", "clipboard"], input=text, text=True, check=True)
+        return
+    if have("xsel"):
+        subprocess.run(["xsel", "--clipboard", "--input"], input=text, text=True, check=True)
+        return
+    raise SystemExit("no clipboard setter found; install wl-clipboard or xclip")
+
+
+def clipboard_get() -> None:
+    if session_type() == "wayland" and have("wl-paste"):
+        print(run(["wl-paste"], check=False).stdout, end="")
+        return
+    if have("xclip"):
+        print(run(["xclip", "-selection", "clipboard", "-o"], check=False).stdout, end="")
+        return
+    if have("xsel"):
+        print(run(["xsel", "--clipboard", "--output"], check=False).stdout, end="")
+        return
+    raise SystemExit("no clipboard getter found; install wl-clipboard or xclip")
+
+
+def key_code(name: str) -> int:
+    key = name.lower()
+    if key in NAMED_KEYS:
+        return NAMED_KEYS[key]
+    if key in KEYS:
+        return KEYS[key]
+    raise SystemExit(f"unknown key: {name}")
+
+
+def uinput_action(action) -> None:
+    try:
+        with UInput() as ui:
+            action(ui)
+    except PermissionError:
+        raise SystemExit("permission denied opening /dev/uinput; run installer or add uaccess udev rule")
+    except FileNotFoundError:
+        raise SystemExit("/dev/uinput not found; load the uinput kernel module")
+
+
+def doctor(args: argparse.Namespace) -> None:
+    checks = {
+        "session_type": session_type() or None,
+        "desktop": desktop() or None,
+        "display": os.environ.get("DISPLAY"),
+        "wayland_display": os.environ.get("WAYLAND_DISPLAY"),
+        "package_manager": package_manager(),
+        "tools": {name: have(name) for name in [
+            "spectacle", "grim", "gnome-screenshot", "scrot", "maim", "import",
+            "ydotool", "wtype", "wl-copy", "wl-paste", "xclip", "xsel", "qdbus",
+        ]},
+        "uinput_exists": Path("/dev/uinput").exists(),
+        "uinput_readable": os.access("/dev/uinput", os.R_OK),
+        "uinput_writable": os.access("/dev/uinput", os.W_OK),
+    }
+    if args.probe:
+        probe_path = Path(args.probe_output).expanduser()
+        try:
+            screenshot(argparse.Namespace(output=str(probe_path), pointer=False))
+            checks["screenshot_probe"] = str(probe_path.resolve())
+        except SystemExit as exc:
+            checks["screenshot_probe_error"] = str(exc)
+        try:
+            uinput_action(lambda ui: ui.move(1, 1))
+            checks["uinput_probe"] = True
+        except SystemExit as exc:
+            checks["uinput_probe_error"] = str(exc)
+    if args.json:
+        print(json.dumps(checks, indent=2, sort_keys=True))
+    else:
+        for key, value in checks.items():
+            if isinstance(value, dict):
+                print(f"{key}:")
+                for child_key, child_value in value.items():
+                    print(f"  {child_key}: {child_value}")
+            else:
+                print(f"{key}: {value}")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(prog="agent-linux-control")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    p = sub.add_parser("doctor", help="inspect desktop-control readiness")
+    p.add_argument("--json", action="store_true")
+    p.add_argument("--probe", action="store_true", help="run screenshot and uinput probes")
+    p.add_argument("--probe-output", default="/tmp/agent-linux-control-doctor.png")
+    p.set_defaults(func=doctor)
+
+    p = sub.add_parser("screenshot", help="capture the screen")
+    p.add_argument("--output", "-o", default="/tmp/agent-linux-control-screen.png")
+    p.add_argument("--pointer", action="store_true")
+    p.set_defaults(func=screenshot)
+
+    p = sub.add_parser("move", help="move pointer by relative pixels")
+    p.add_argument("dx", type=int)
+    p.add_argument("dy", type=int)
+    p.set_defaults(func=lambda a: uinput_action(lambda ui: ui.move(a.dx, a.dy)))
+
+    p = sub.add_parser("goto", help="move pointer to approximate absolute screen coordinates")
+    p.add_argument("x", type=int)
+    p.add_argument("y", type=int)
+    p.set_defaults(func=lambda a: uinput_action(lambda ui: ui.goto(a.x, a.y)))
+
+    p = sub.add_parser("click", help="click a mouse button, optionally at coordinates")
+    p.add_argument("button", choices=sorted(BUTTONS), nargs="?", default="left")
+    p.add_argument("--x", type=int)
+    p.add_argument("--y", type=int)
+    def do_click(a: argparse.Namespace) -> None:
+        def action(ui: UInput) -> None:
+            if a.x is not None and a.y is not None:
+                ui.goto(a.x, a.y)
+                time.sleep(0.05)
+            ui.click(a.button)
+        uinput_action(action)
+    p.set_defaults(func=do_click)
+
+    p = sub.add_parser("scroll", help="scroll vertically and optionally horizontally")
+    p.add_argument("vertical", type=int)
+    p.add_argument("horizontal", type=int, nargs="?", default=0)
+    p.set_defaults(func=lambda a: uinput_action(lambda ui: ui.scroll(a.vertical, a.horizontal)))
+
+    p = sub.add_parser("key", help="press and release a named key")
+    p.add_argument("name")
+    p.set_defaults(func=lambda a: uinput_action(lambda ui: ui.tap(key_code(a.name))))
+
+    p = sub.add_parser("hotkey", help="press a key chord such as ctrl+l or alt+tab")
+    p.add_argument("chord")
+    p.set_defaults(func=lambda a: uinput_action(lambda ui: ui.hotkey([key_code(x) for x in a.chord.split("+") if x])))
+
+    p = sub.add_parser("type", help="type ASCII text")
+    p.add_argument("text")
+    p.set_defaults(func=lambda a: uinput_action(lambda ui: ui.type_text(a.text)))
+
+    p = sub.add_parser("clipboard", help="get or set clipboard text")
+    clip_sub = p.add_subparsers(dest="clipboard_command", required=True)
+    cp = clip_sub.add_parser("set")
+    cp.add_argument("text", nargs="?")
+    cp.add_argument("--file")
+    cp.set_defaults(func=lambda a: clipboard_set(Path(a.file).read_text() if a.file else (a.text or sys.stdin.read())))
+    cp = clip_sub.add_parser("get")
+    cp.set_defaults(func=lambda a: clipboard_get())
+
+    p = sub.add_parser("open", help="open a URL or file with xdg-open")
+    p.add_argument("target")
+    p.set_defaults(func=lambda a: subprocess.Popen(["xdg-open", a.target], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
+
+    args = parser.parse_args()
+    result = args.func(args)
+    if isinstance(result, subprocess.Popen):
+        print(f"opened: {args.target}")
+
+
+if __name__ == "__main__":
+    main()

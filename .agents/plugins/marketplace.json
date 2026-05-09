@@ -1,0 +1,20 @@
+{
+  "name": "agent-linux-control-marketplace",
+  "interface": {
+    "displayName": "Agent Linux Control"
+  },
+  "plugins": [
+    {
+      "name": "agent-linux-control",
+      "source": {
+        "source": "local",
+        "path": "./plugins/agent-linux-control"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer-Tools"
+    }
+  ]
+}
