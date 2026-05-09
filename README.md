@@ -43,6 +43,14 @@ agent-linux-control hotkey ctrl+l
 agent-linux-control clipboard set "long text"
 ```
 
+## Verified Hosts
+
+- 2026-05-09: Nobara/Fedora 43 KDE Plasma Wayland.
+  - Public curl installer succeeded from `raw.githubusercontent.com/antharmaya/agent-linux-control`.
+  - `dnf` installed missing optional packages: `grim`, `slurp`, `scrot`, `imlib2`.
+  - `agent-linux-control doctor` reported writable `/dev/uinput`.
+  - Installed CLI captured a 1920x2160 screenshot and sent a small uinput move/key smoke successfully.
+
 ## Project Layout
 
 - `bin/agent-linux-control` - Python stdlib CLI; no daemon required.
