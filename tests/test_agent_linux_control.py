@@ -59,7 +59,26 @@ class AgentLinuxControlTests(unittest.TestCase):
 
     def test_mcp_tool_names_are_discoverable(self):
         names = {tool["name"] for tool in alc.MCP_TOOLS}
-        self.assertTrue({"observe", "click", "paste", "browser", "sequence"} <= names)
+        self.assertTrue({"manifest", "observe", "click", "paste", "browser", "sequence"} <= names)
+
+    def test_manifest_has_risk_metadata(self):
+        manifest = alc.agent_manifest()
+        capabilities = {item["name"]: item for item in manifest["capabilities"]}
+        self.assertTrue(capabilities["observe"]["read_only"])
+        self.assertFalse(capabilities["click"]["read_only"])
+        self.assertEqual(capabilities["paste"]["risk"], "text-entry")
+
+    def test_journal_redacts_text_payloads(self):
+        sanitized = alc.sanitize_for_journal({"action": "paste", "text": "secret text"})
+        self.assertNotIn("text", sanitized)
+        self.assertEqual(sanitized["text_length"], 11)
+        self.assertIn("text_sha256", sanitized)
+
+    def test_obsidian_export_contains_expected_nodes(self):
+        names = alc.obsidian_node_names()
+        self.assertIn("Agent Linux Control.md", names)
+        self.assertIn("Capabilities.md", names)
+        self.assertIn("Validation Matrix.md", names)
 
 
 if __name__ == "__main__":

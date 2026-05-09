@@ -19,7 +19,7 @@ import struct
 import fcntl
 from pathlib import Path
 
-VERSION = "0.2.0"
+VERSION = "0.3.0"
 
 EV_SYN = 0x00
 EV_KEY = 0x01
@@ -194,6 +194,93 @@ BROWSER_CANDIDATES = [
     ("firefox", "firefox"),
 ]
 
+CAPABILITIES = [
+    {
+        "name": "manifest",
+        "kind": "introspection",
+        "risk": "none",
+        "read_only": True,
+        "description": "Return the agent-readable contract, safety model, and capability map.",
+    },
+    {
+        "name": "doctor",
+        "kind": "readiness",
+        "risk": "none",
+        "read_only": True,
+        "description": "Inspect Linux desktop-control readiness and optional probes.",
+    },
+    {
+        "name": "observe",
+        "kind": "perception",
+        "risk": "screen-read",
+        "read_only": True,
+        "description": "Capture a screenshot plus desktop, tool, size, hash, and timing metadata.",
+    },
+    {
+        "name": "watch",
+        "kind": "perception",
+        "risk": "screen-read",
+        "read_only": True,
+        "description": "Emit repeated observation JSONL frames for realtime-ish monitoring.",
+    },
+    {
+        "name": "wait-change",
+        "kind": "perception",
+        "risk": "screen-read",
+        "read_only": True,
+        "description": "Wait until the visible screen hash changes after an action.",
+    },
+    {
+        "name": "click",
+        "kind": "actuation",
+        "risk": "ui-action",
+        "read_only": False,
+        "description": "Move to optional coordinates and click a mouse button.",
+    },
+    {
+        "name": "type",
+        "kind": "actuation",
+        "risk": "text-entry",
+        "read_only": False,
+        "description": "Type short ASCII text through the OS keyboard backend.",
+    },
+    {
+        "name": "paste",
+        "kind": "actuation",
+        "risk": "text-entry",
+        "read_only": False,
+        "description": "Set clipboard and paste with Ctrl+V; preferred for long text.",
+    },
+    {
+        "name": "browser",
+        "kind": "app-launch",
+        "risk": "network-navigation",
+        "read_only": False,
+        "description": "Launch a supported browser at a URL, optionally requiring a specific browser.",
+    },
+    {
+        "name": "sequence",
+        "kind": "orchestration",
+        "risk": "compound-action",
+        "read_only": False,
+        "description": "Run a JSON batch of desktop actions and observations with structured results.",
+    },
+    {
+        "name": "mcp",
+        "kind": "integration",
+        "risk": "tool-server",
+        "read_only": False,
+        "description": "Expose core controls as a stdio MCP tool server.",
+    },
+    {
+        "name": "brain",
+        "kind": "knowledge-export",
+        "risk": "metadata-write",
+        "read_only": False,
+        "description": "Export an Obsidian-compatible agent brain map for workspace reasoning.",
+    },
+]
+
 
 def ioctl_iow(type_char: str, number: int, size: int) -> int:
     ioc_nrbits = 8
@@ -363,12 +450,95 @@ def now_ms() -> int:
     return int(time.time() * 1000)
 
 
+def default_journal_path() -> Path:
+    configured = os.environ.get("AGENT_LINUX_CONTROL_JOURNAL")
+    if configured:
+        return Path(configured).expanduser()
+    state_home = Path(os.environ.get("XDG_STATE_HOME", "~/.local/state")).expanduser()
+    return state_home / "agent-linux-control" / "events.jsonl"
+
+
+def sha256_text(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as fh:
         for chunk in iter(lambda: fh.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def sanitize_for_journal(value: object) -> object:
+    if isinstance(value, dict):
+        sanitized: dict[str, object] = {}
+        for key, child in value.items():
+            key_lc = str(key).lower()
+            if key_lc in {"text", "password", "secret", "token", "clipboard"} and isinstance(child, str):
+                sanitized[f"{key}_length"] = len(child)
+                sanitized[f"{key}_sha256"] = sha256_text(child)
+            else:
+                sanitized[str(key)] = sanitize_for_journal(child)
+        return sanitized
+    if isinstance(value, list):
+        return [sanitize_for_journal(item) for item in value]
+    return value
+
+
+def journal_event(event_type: str, payload: dict[str, object]) -> None:
+    if os.environ.get("AGENT_LINUX_CONTROL_NO_JOURNAL") == "1":
+        return
+    event = {
+        "timestamp_ms": now_ms(),
+        "version": VERSION,
+        "event": event_type,
+        "payload": sanitize_for_journal(payload),
+    }
+    try:
+        path = default_journal_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(event, sort_keys=True, separators=(",", ":")) + "\n")
+    except OSError:
+        return
+
+
+def agent_manifest() -> dict[str, object]:
+    return {
+        "name": "agent-linux-control",
+        "version": VERSION,
+        "mission": "Linux agent control substrate for perception, actuation, verification, and workflow integration.",
+        "principles": [
+            "Observe before acting.",
+            "Prefer app-native or DOM automation before OS-level control.",
+            "Use paste for long text and sequence for known multi-step plans.",
+            "Verify visible state after important UI actions.",
+            "Never enter secrets, approve elevated prompts, submit payments, or delete data without explicit user approval.",
+        ],
+        "recommended_loop": [
+            "doctor",
+            "observe",
+            "plan one action or sequence",
+            "act",
+            "wait-change or observe",
+            "journal outcome",
+        ],
+        "journal": {
+            "enabled_by_default": os.environ.get("AGENT_LINUX_CONTROL_NO_JOURNAL") != "1",
+            "path": str(default_journal_path()),
+            "redaction": "Text-like fields are stored as length and sha256, not raw content.",
+        },
+        "obsidian": {
+            "export_command": "agent-linux-control brain export --output-dir ./agent-linux-control-vault",
+            "purpose": "Create a local graph of capabilities, workflows, validations, and integration recipes.",
+        },
+        "capabilities": CAPABILITIES,
+    }
+
+
+def manifest_cmd(args: argparse.Namespace) -> None:
+    stdout_json(agent_manifest(), pretty=not args.compact)
 
 
 def png_size(path: Path) -> tuple[int | None, int | None]:
@@ -465,7 +635,9 @@ def observation(output: str, pointer: bool = False) -> dict[str, object]:
 
 
 def observe(args: argparse.Namespace) -> None:
-    stdout_json(observation(args.output, args.pointer), pretty=not args.compact)
+    payload = observation(args.output, args.pointer)
+    journal_event("observe", payload)
+    stdout_json(payload, pretty=not args.compact)
 
 
 def watch(args: argparse.Namespace) -> None:
@@ -480,6 +652,7 @@ def watch(args: argparse.Namespace) -> None:
             current_hash = str(payload["screenshot"]["sha256"])  # type: ignore[index]
             payload["index"] = index
             payload["changed"] = previous_hash is not None and current_hash != previous_hash
+            journal_event("watch.frame", payload)
             print(json.dumps(payload, sort_keys=True), flush=True)
             previous_hash = current_hash
             index += 1
@@ -519,7 +692,116 @@ def wait_change(timeout: float, interval: float, output: str, pointer: bool = Fa
 
 
 def wait_cmd(args: argparse.Namespace) -> None:
-    stdout_json(wait_change(args.timeout, args.interval, args.output, args.pointer), pretty=not args.compact)
+    payload = wait_change(args.timeout, args.interval, args.output, args.pointer)
+    journal_event("wait-change", payload)
+    stdout_json(payload, pretty=not args.compact)
+
+
+def journal_cmd(args: argparse.Namespace) -> None:
+    path = default_journal_path()
+    if args.journal_command == "path":
+        print(str(path))
+        return
+    if args.journal_command == "tail":
+        if not path.exists():
+            return
+        lines = path.read_text(encoding="utf-8").splitlines()
+        for line in lines[-args.lines:]:
+            print(line)
+
+
+def obsidian_node_names() -> list[str]:
+    return [
+        "Agent Linux Control.md",
+        "Capabilities.md",
+        "Agent Loop.md",
+        "Validation Matrix.md",
+        "Security Model.md",
+        "Integrations.md",
+    ]
+
+
+def obsidian_nodes() -> dict[str, str]:
+    manifest = agent_manifest()
+    capability_lines = [
+        f"- [[{item['name']}]] - {item['kind']} - risk: `{item['risk']}` - read only: `{item['read_only']}`"
+        for item in CAPABILITIES
+    ]
+    tool_nodes = {
+        f"tools/{item['name']}.md": (
+            f"# {item['name']}\n\n"
+            f"Kind: `{item['kind']}`\n\n"
+            f"Risk: `{item['risk']}`\n\n"
+            f"Read only: `{item['read_only']}`\n\n"
+            f"{item['description']}\n\n"
+            "Backlinks: [[Capabilities]] [[Agent Loop]]\n"
+        )
+        for item in CAPABILITIES
+    }
+    nodes = {
+        "Agent Linux Control.md": (
+            "# Agent Linux Control\n\n"
+            "Linux agent-control substrate for [[Capabilities]], [[Agent Loop]], [[Security Model]], "
+            "[[Validation Matrix]], and [[Integrations]].\n\n"
+            f"Version: `{VERSION}`\n\n"
+            f"Journal: `{manifest['journal']['path']}`\n"
+        ),
+        "Capabilities.md": "# Capabilities\n\n" + "\n".join(capability_lines) + "\n",
+        "Agent Loop.md": (
+            "# Agent Loop\n\n"
+            "1. [[doctor]]\n"
+            "2. [[observe]]\n"
+            "3. Plan one action or [[sequence]]\n"
+            "4. Act through [[click]], [[paste]], [[browser]], or keyboard tools\n"
+            "5. Verify with [[wait-change]] or [[observe]]\n"
+            "6. Review [[Validation Matrix]] and journal outcomes\n"
+        ),
+        "Validation Matrix.md": (
+            "# Validation Matrix\n\n"
+            "| Layer | Validation |\n"
+            "|---|---|\n"
+            "| Install | `AGENT_LINUX_CONTROL_NO_DEPS=1 AGENT_LINUX_CONTROL_SOURCE_DIR=\"$PWD\" ./install.sh` |\n"
+            "| Syntax | `python3 -m py_compile bin/agent-linux-control` |\n"
+            "| Unit | `python3 -m unittest tests/test_agent_linux_control.py` |\n"
+            "| Runtime | `./scripts/smoke.sh` |\n"
+            "| Perception | `agent-linux-control observe --output /tmp/alc.png` |\n"
+            "| MCP | `printf ... | agent-linux-control mcp` |\n"
+        ),
+        "Security Model.md": (
+            "# Security Model\n\n"
+            "- OS-level control is powerful and must be treated as a privileged actuator.\n"
+            "- Raw text-like payloads are redacted in the journal.\n"
+            "- Agents must not enter secrets, approve elevated prompts, submit payments, or delete data without explicit approval.\n"
+            "- Prefer read-only observation before mutation.\n"
+            "- Prefer strict browser selection with `--require-prefer` when target browser matters.\n"
+        ),
+        "Integrations.md": (
+            "# Integrations\n\n"
+            "- Codex: skill plus optional MCP stdio server.\n"
+            "- Claude Code: skill, MCP config, and hook-compatible command surfaces.\n"
+            "- Gemini/OpenCode/Qwen/Goose/Windsurf: portable skill plus shell command surface.\n"
+            "- Obsidian: this vault export for graphing capabilities, workflows, and validation evidence.\n"
+        ),
+    }
+    nodes.update(tool_nodes)
+    return nodes
+
+
+def export_obsidian(output_dir: str) -> dict[str, object]:
+    root = Path(output_dir).expanduser().resolve()
+    written: list[str] = []
+    for rel_path, content in obsidian_nodes().items():
+        path = root / rel_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+        written.append(str(path))
+    journal_event("brain.export", {"output_dir": str(root), "files": written})
+    return {"output_dir": str(root), "files": written}
+
+
+def brain_cmd(args: argparse.Namespace) -> None:
+    if args.brain_command == "export":
+        stdout_json(export_obsidian(args.output_dir), pretty=not args.compact)
 
 
 def clipboard_set(text: str) -> None:
@@ -649,6 +931,7 @@ def launch_browser(url: str, prefer: str | None = None, new_window: bool = True,
 
 def browser_cmd(args: argparse.Namespace) -> None:
     result = launch_browser(args.url, args.prefer, not args.same_window, args.require_prefer)
+    journal_event("browser", result)
     if args.json:
         stdout_json(result)
     else:
@@ -779,11 +1062,17 @@ def sequence_cmd(args: argparse.Namespace) -> None:
         if not event["ok"] and not args.continue_on_error:
             break
     stdout_json({"ok": ok, "events": events}, pretty=not args.compact)
+    journal_event("sequence", {"ok": ok, "events": events})
     if not ok:
         raise SystemExit(1)
 
 
 MCP_TOOLS: list[dict[str, object]] = [
+    {
+        "name": "manifest",
+        "description": "Return the agent-readable contract, safety model, capability map, and journal/Obsidian integration hints.",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
     {
         "name": "observe",
         "description": "Capture a screenshot and return desktop/session metadata plus image dimensions and hash.",
@@ -868,6 +1157,8 @@ def mcp_text(payload: object) -> dict[str, object]:
 
 
 def mcp_tool_call(name: str, arguments: dict[str, object]) -> dict[str, object]:
+    if name == "manifest":
+        return mcp_text(agent_manifest())
     if name == "observe":
         return mcp_text(observation(str(arguments.get("output") or "/tmp/agent-linux-control-observe.png"), bool(arguments.get("pointer", False))))
     if name == "click":
@@ -971,6 +1262,10 @@ def main() -> None:
     parser.add_argument("--version", action="version", version=f"%(prog)s {VERSION}")
     sub = parser.add_subparsers(dest="command", required=True)
 
+    p = sub.add_parser("manifest", help="print the agent-readable capability contract")
+    p.add_argument("--compact", action="store_true", help="emit compact JSON")
+    p.set_defaults(func=manifest_cmd)
+
     p = sub.add_parser("doctor", help="inspect desktop-control readiness")
     p.add_argument("--json", action="store_true")
     p.add_argument("--probe", action="store_true", help="run screenshot and uinput probes")
@@ -1003,6 +1298,21 @@ def main() -> None:
     p.add_argument("--pointer", action="store_true")
     p.add_argument("--compact", action="store_true", help="emit compact JSON")
     p.set_defaults(func=wait_cmd)
+
+    p = sub.add_parser("journal", help="inspect the privacy-safe event journal")
+    journal_sub = p.add_subparsers(dest="journal_command", required=True)
+    jp = journal_sub.add_parser("path", help="print journal path")
+    jp.set_defaults(func=journal_cmd)
+    jt = journal_sub.add_parser("tail", help="print recent journal events")
+    jt.add_argument("--lines", type=int, default=20)
+    jt.set_defaults(func=journal_cmd)
+
+    p = sub.add_parser("brain", help="export agent brain maps for Obsidian")
+    brain_sub = p.add_subparsers(dest="brain_command", required=True)
+    bp = brain_sub.add_parser("export", help="write an Obsidian-compatible vault")
+    bp.add_argument("--output-dir", default="./agent-linux-control-vault")
+    bp.add_argument("--compact", action="store_true", help="emit compact JSON")
+    bp.set_defaults(func=brain_cmd)
 
     p = sub.add_parser("move", help="move pointer by relative pixels")
     p.add_argument("dx", type=int)

@@ -1,6 +1,6 @@
 # Agent Linux Control
 
-Premium Linux desktop-control toolkit for coding agents. It gives an agent one CLI for realtime observation, screenshots, mouse, keyboard, clipboard, browser launch, batched action sequences, MCP access, and readiness checks on Fedora/Nobara, Debian/Ubuntu, Arch, openSUSE, Alpine, KDE, GNOME, Wayland, and X11-like setups.
+Premium Linux desktop-control toolkit for coding agents. It gives an agent one CLI for realtime observation, screenshots, mouse, keyboard, clipboard, browser launch, batched action sequences, MCP access, privacy-safe journaling, Obsidian brain maps, and readiness checks on Fedora/Nobara, Debian/Ubuntu, Arch, openSUSE, Alpine, KDE, GNOME, Wayland, and X11-like setups.
 
 The goal is plug-and-play computer control for Linux agents in the same spirit as modern desktop-agent products: keep the user's existing agent, install one tool, then let that agent inspect and operate the local desktop safely. It is designed for Codex, Claude Code, Gemini CLI, OpenCode, Qwen, Goose, Windsurf, generic shell agents, and browser-heavy workflows such as Zen Browser testing.
 
@@ -35,6 +35,7 @@ On Raspberry Pi and other ARM Linux systems, the same installer path is used. Pa
 ## Use
 
 ```sh
+agent-linux-control manifest
 agent-linux-control doctor
 agent-linux-control observe --output /tmp/screen.png
 agent-linux-control click left --x 900 --y 600
@@ -44,23 +45,33 @@ agent-linux-control clipboard set "long text"
 agent-linux-control browser --prefer chrome https://reddit.com
 agent-linux-control browser --prefer chrome --require-prefer https://reddit.com
 agent-linux-control watch --count 10 --interval 0.5 --output-dir /tmp/alc-watch
+agent-linux-control journal tail --lines 5
+agent-linux-control brain export --output-dir ./agent-linux-control-vault
 ```
 
 ## Agent Loop
 
 Use the higher-level loop for smoother work:
 
-1. `agent-linux-control observe --output /tmp/alc-screen.png`
-2. Inspect the screenshot in the host agent.
-3. Run one precise action or a batch:
+1. `agent-linux-control manifest`
+2. `agent-linux-control observe --output /tmp/alc-screen.png`
+3. Inspect the screenshot in the host agent.
+4. Run one precise action or a batch:
 
 ```sh
 agent-linux-control sequence --file examples/sequence.browser-observe.json
 ```
 
-4. Use `agent-linux-control wait-change` or `agent-linux-control observe` to verify the UI changed.
+5. Use `agent-linux-control wait-change` or `agent-linux-control observe` to verify the UI changed.
+6. Review `agent-linux-control journal tail` when an agent needs to recover or explain what happened.
 
 `sequence` accepts JSON steps such as `observe`, `browser`, `click`, `type`, `paste`, `hotkey`, `scroll`, `wait-change`, and `sleep`. Batching removes tool-call latency and makes the desktop feel closer to a realtime control surface. Browser steps accept `require_prefer: true` when the agent must fail instead of falling back to another browser.
+
+`manifest` is the machine-readable contract for first-class agents. It describes each capability, risk class, read-only status, recommended loop, journal behavior, and Obsidian export path.
+
+`journal` writes privacy-safe JSONL events to `${XDG_STATE_HOME:-~/.local/state}/agent-linux-control/events.jsonl` by default. Text-like fields are stored as length and SHA-256, not raw content. Set `AGENT_LINUX_CONTROL_NO_JOURNAL=1` to disable it.
+
+`brain export` writes an Obsidian-compatible vault with capability, workflow, validation, security, and integration nodes. Use it as a visual project brain for skill development and agent workflow design.
 
 ## MCP
 
@@ -83,7 +94,7 @@ Example `.mcp.json`:
 }
 ```
 
-The MCP server exposes `observe`, `click`, `type`, `paste`, `hotkey`, `browser`, and `sequence` tools.
+The MCP server exposes `manifest`, `observe`, `click`, `type`, `paste`, `hotkey`, `browser`, and `sequence` tools.
 
 ## Verified Hosts
 
@@ -101,6 +112,7 @@ The MCP server exposes `observe`, `click`, `type`, `paste`, `hotkey`, `browser`,
 - `plugins/agent-linux-control/` - Codex plugin wrapper around the skill.
 - `examples/` - ready-to-copy MCP and sequence configs.
 - `docs/research-2026.md` - product/research notes behind the agent experience.
+- `docs/agent-os-architecture.md` - OS-style architecture for first-class agent integrations.
 - `adapters/` - notes for Codex, Claude Code, Gemini CLI, OpenCode, Zen/browser targets, Pi/ARM Linux, and other agents.
 
 ## Safety

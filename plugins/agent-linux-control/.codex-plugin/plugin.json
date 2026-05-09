@@ -1,7 +1,7 @@
 {
   "name": "agent-linux-control",
-  "version": "0.2.0",
-  "description": "Premium Linux desktop-control toolkit for coding agents: realtime observe/watch loops, mouse, keyboard, clipboard paste, browser launch, MCP, batched sequences, and readiness checks.",
+  "version": "0.3.0",
+  "description": "Premium Linux desktop-control toolkit for coding agents: manifest, realtime observe/watch loops, mouse, keyboard, clipboard paste, browser launch, MCP, batched sequences, privacy-safe journal, Obsidian brain export, and readiness checks.",
   "author": {
     "name": "Antharmaya Labs",
     "email": "hello@antharmaya.com",
@@ -20,7 +20,7 @@
   "interface": {
     "displayName": "Agent Linux Control",
     "shortDescription": "Let coding agents operate Linux desktops through one CLI.",
-    "longDescription": "Installs a Linux desktop-control command and skill so Codex, Claude Code, Gemini CLI, OpenCode, and other agents can observe screens, run realtime watch loops, move/click/type, paste reliably, launch browsers, execute batched action sequences, expose MCP tools, test Zen/browser workflows, and verify readiness on Fedora-like, Debian-like, Arch-like, Alpine, and Raspberry Pi/ARM Linux systems.",
+    "longDescription": "Installs a Linux desktop-control command and skill so Codex, Claude Code, Gemini CLI, OpenCode, and other agents can read a capability manifest, observe screens, run realtime watch loops, move/click/type, paste reliably, launch browsers, execute batched action sequences, expose MCP tools, journal privacy-safe events, export Obsidian brain maps, test Zen/browser workflows, and verify readiness on Fedora-like, Debian-like, Arch-like, Alpine, and Raspberry Pi/ARM Linux systems.",
     "developerName": "Antharmaya Labs",
     "category": "Developer Tools",
     "capabilities": [
@@ -28,6 +28,8 @@
       "Desktop Control",
       "Realtime Observation",
       "Screenshots",
+      "Agent Journal",
+      "Obsidian Brain Map",
       "Automation"
     ],
     "websiteURL": "https://github.com/antharmaya/agent-linux-control",

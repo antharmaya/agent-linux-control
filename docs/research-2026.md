@@ -17,6 +17,8 @@ These notes shape the product direction for `agent-linux-control`.
 - Browser launch should be first class. Agents often need Chrome, Chromium, Zen, Brave, Firefox, or Edge before they can test web workflows.
 - Realtime needs a primitive. `watch` emits JSONL observations at an interval; `wait-change` gives a cheap feedback loop after UI actions.
 - Interoperability needs both skills and MCP. Skills teach the workflow; `agent-linux-control mcp` gives structured tools to clients that support MCP.
+- First-class agents need a machine-readable contract. `manifest` exposes capability, risk, and recovery metadata so agents do not have to infer tool semantics from help text.
+- Recovery needs memory. `journal` records privacy-safe JSONL events, and `brain export` turns the control layer into an Obsidian graph for skill development and validation review.
 - Linux must stay boring to install. Keep the runtime Python-stdlib-only and keep the curl installer cross-distro.
 
 ## Source Links

@@ -14,10 +14,11 @@ For browser work in Zen, Chrome, Firefox, or Electron apps, prefer DOM/browser a
 ## Startup
 
 1. Run `agent-linux-control doctor`.
-2. Capture before acting: `agent-linux-control observe --output /tmp/alc-screen.png`.
-3. Inspect the screenshot with the image viewer available to the agent.
-4. Move/click/type in small steps, or use `sequence` for an atomic batch.
-5. Verify with `agent-linux-control observe` or `agent-linux-control wait-change`.
+2. Run `agent-linux-control manifest` when you need the tool contract, risk classes, or recovery loop.
+3. Capture before acting: `agent-linux-control observe --output /tmp/alc-screen.png`.
+4. Inspect the screenshot with the image viewer available to the agent.
+5. Move/click/type in small steps, or use `sequence` for an atomic batch.
+6. Verify with `agent-linux-control observe` or `agent-linux-control wait-change`.
 
 ## Smooth Agent Loop
 
@@ -27,11 +28,14 @@ For browser work in Zen, Chrome, Firefox, or Electron apps, prefer DOM/browser a
 - Use `watch` for realtime-ish monitoring while a UI is loading.
 - Use `wait-change` after clicks, browser launches, reloads, and other UI transitions.
 - Use `browser --prefer chrome|chromium|zen|firefox URL` to launch a supported local browser directly. Add `--require-prefer` when fallback to another browser would be wrong.
+- Use `journal tail` to understand what happened across previous actions. Raw text payloads are redacted into length and SHA-256.
+- Use `brain export` to create an Obsidian vault for capability maps, validation nodes, and skill-development planning.
 - If the agent supports MCP, configure `agent-linux-control mcp` as a stdio MCP server and prefer the MCP tools for structured calls.
 
 ## Commands
 
 - Observe: `agent-linux-control observe --output /tmp/alc.png`
+- Manifest: `agent-linux-control manifest`
 - Screenshot only: `agent-linux-control screenshot --output /tmp/alc.png`
 - Screenshot with pointer when supported: `agent-linux-control screenshot --pointer --output /tmp/alc.png`
 - Watch screen changes: `agent-linux-control watch --count 10 --interval 0.5 --output-dir /tmp/alc-watch`
@@ -51,6 +55,9 @@ For browser work in Zen, Chrome, Firefox, or Electron apps, prefer DOM/browser a
 - Strict browser launch: `agent-linux-control browser --prefer chrome --require-prefer https://example.com`
 - Batched actions: `agent-linux-control sequence --file plan.json`
 - MCP server: `agent-linux-control mcp`
+- Journal path: `agent-linux-control journal path`
+- Journal tail: `agent-linux-control journal tail --lines 10`
+- Obsidian brain export: `agent-linux-control brain export --output-dir ./agent-linux-control-vault`
 - Open URL/file: `agent-linux-control open https://example.com`
 
 ## Operating Rules
