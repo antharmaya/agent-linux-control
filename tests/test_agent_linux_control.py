@@ -141,6 +141,23 @@ class AgentLinuxControlTests(unittest.TestCase):
             alc.have = original_have
             alc.session_type = original_session_type
 
+    def test_benchmark_summary_reports_basic_stats(self):
+        summary = alc.benchmark_summary([10.0, 20.0, 30.0])
+        self.assertEqual(summary["count"], 3)
+        self.assertEqual(summary["min_ms"], 10.0)
+        self.assertEqual(summary["max_ms"], 30.0)
+        self.assertEqual(summary["avg_ms"], 20.0)
+
+    def test_benchmark_summary_handles_empty_samples(self):
+        summary = alc.benchmark_summary([])
+        self.assertEqual(summary["count"], 0)
+        self.assertIsNone(summary["avg_ms"])
+
+    def test_input_step_detection_for_sequence_reuse(self):
+        self.assertTrue(alc.is_input_step({"action": "click"}))
+        self.assertTrue(alc.is_input_step({"type": "hotkey"}))
+        self.assertFalse(alc.is_input_step({"action": "observe"}))
+
 
 if __name__ == "__main__":
     unittest.main()

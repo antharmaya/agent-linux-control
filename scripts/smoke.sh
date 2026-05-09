@@ -14,6 +14,7 @@ CLI="$ROOT/bin/agent-linux-control"
 "$CLI" watch --brief --count 1 --interval 0.1 --output-dir /tmp/agent-linux-control-watch-brief >/tmp/agent-linux-control-watch-brief.jsonl
 "$CLI" journal path >/tmp/agent-linux-control-journal-path.txt
 "$CLI" brain export --output-dir /tmp/agent-linux-control-vault --compact >/tmp/agent-linux-control-brain.json
+"$CLI" bench observe --count 1 --brief --output-dir /tmp/agent-linux-control-bench >/tmp/agent-linux-control-bench-observe.json
 printf '%s\n' '{"steps":[{"action":"observe","output":"/tmp/agent-linux-control-sequence.png"},{"action":"sleep","seconds":0.01}]}' | "$CLI" sequence --file - --compact >/tmp/agent-linux-control-sequence.json
 printf '%s\n' '{"steps":[{"action":"observe","output":"/tmp/agent-linux-control-sequence-brief.png"},{"action":"sleep","seconds":0.01}]}' | "$CLI" sequence --file - --brief >/tmp/agent-linux-control-sequence-brief.json
 printf '%s\n' '{"steps":[{"action":"browser","url":"https://example.com","prefer":"missing-browser","require_prefer":true}]}' | "$CLI" sequence --file - --compact >/tmp/agent-linux-control-sequence-error.json || true
@@ -31,6 +32,7 @@ python3 -m json.tool /tmp/agent-linux-control-manifest-brief.json >/dev/null
 python3 -m json.tool /tmp/agent-linux-control-observe.json >/dev/null
 python3 -m json.tool /tmp/agent-linux-control-observe-brief.json >/dev/null
 python3 -m json.tool /tmp/agent-linux-control-brain.json >/dev/null
+python3 -m json.tool /tmp/agent-linux-control-bench-observe.json >/dev/null
 python3 -m json.tool /tmp/agent-linux-control-sequence.json >/dev/null
 python3 -m json.tool /tmp/agent-linux-control-sequence-brief.json >/dev/null
 python3 -m json.tool /tmp/agent-linux-control-sequence-error.json >/dev/null

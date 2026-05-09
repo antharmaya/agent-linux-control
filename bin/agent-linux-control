@@ -194,6 +194,8 @@ BROWSER_CANDIDATES = [
     ("firefox", "firefox"),
 ]
 
+INPUT_ACTIONS = {"move", "goto", "click", "scroll", "key", "hotkey", "type"}
+
 CAPABILITIES = [
     {
         "name": "manifest",
@@ -452,6 +454,22 @@ def emit_json(payload: object, compact: bool = False, brief: bool = False) -> No
 
 def now_ms() -> int:
     return int(time.time() * 1000)
+
+
+def benchmark_summary(samples: list[float]) -> dict[str, object]:
+    if not samples:
+        return {
+            "count": 0,
+            "min_ms": None,
+            "max_ms": None,
+            "avg_ms": None,
+        }
+    return {
+        "count": len(samples),
+        "min_ms": round(min(samples), 2),
+        "max_ms": round(max(samples), 2),
+        "avg_ms": round(sum(samples) / len(samples), 2),
+    }
 
 
 def default_journal_path() -> Path:
@@ -911,6 +929,63 @@ def brain_cmd(args: argparse.Namespace) -> None:
         stdout_json(export_obsidian(args.output_dir), pretty=not args.compact)
 
 
+def bench_observe(args: argparse.Namespace) -> dict[str, object]:
+    out_dir = Path(args.output_dir).expanduser().resolve()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    wall_samples: list[float] = []
+    cli_samples: list[float] = []
+    runs: list[dict[str, object]] = []
+    for index in range(args.count):
+        output = out_dir / f"observe-{index:03d}.png"
+        started = time.perf_counter()
+        payload = observation(str(output), args.pointer)
+        wall_ms = (time.perf_counter() - started) * 1000
+        wall_samples.append(wall_ms)
+        cli_samples.append(float(payload["duration_ms"]))
+        item = brief_observation(payload) if args.brief else payload
+        if isinstance(item, dict):
+            item["i"] = index
+            item["wall_ms"] = round(wall_ms, 2)
+        runs.append(item)
+    return {
+        "bench": "observe",
+        "version": VERSION,
+        "count": args.count,
+        "wall": benchmark_summary(wall_samples),
+        "cli": benchmark_summary(cli_samples),
+        "runs": runs,
+    }
+
+
+def bench_uinput(args: argparse.Namespace) -> dict[str, object]:
+    samples: list[float] = []
+    runs: list[dict[str, object]] = []
+    for index in range(args.count):
+        started = time.perf_counter()
+        uinput_action(lambda ui: ui.move(args.dx, args.dy))
+        wall_ms = (time.perf_counter() - started) * 1000
+        samples.append(wall_ms)
+        runs.append({"i": index, "wall_ms": round(wall_ms, 2)})
+    return {
+        "bench": "uinput",
+        "version": VERSION,
+        "count": args.count,
+        "wall": benchmark_summary(samples),
+        "runs": runs,
+    }
+
+
+def bench_cmd(args: argparse.Namespace) -> None:
+    if args.bench_command == "observe":
+        payload = bench_observe(args)
+    elif args.bench_command == "uinput":
+        payload = bench_uinput(args)
+    else:
+        raise SystemExit(f"unknown bench command: {args.bench_command}")
+    emit_json(payload, compact=args.compact, brief=args.brief)
+    journal_event("bench", payload)
+
+
 def clipboard_set(text: str) -> None:
     if session_type() == "wayland" and have("wl-copy"):
         subprocess.run(["wl-copy"], input=text, text=True, check=True)
@@ -957,6 +1032,14 @@ def validate_optional_xy(x: object | None, y: object | None) -> tuple[int, int] 
     if x is None:
         return None
     return int(x), int(y)
+
+
+def step_action(step: dict[str, object]) -> str:
+    return str(step.get("action") or step.get("type") or "").lower()
+
+
+def is_input_step(step: dict[str, object]) -> bool:
+    return step_action(step) in INPUT_ACTIONS
 
 
 def key_code(name: str) -> int:
@@ -1071,8 +1154,33 @@ def doctor(args: argparse.Namespace) -> None:
                 print(f"{key}: {value}")
 
 
+def perform_input_step(ui: UInput, step: dict[str, object]) -> dict[str, object]:
+    action = step_action(step)
+    if action == "move":
+        ui.move(int(step.get("dx", 0)), int(step.get("dy", 0)))
+    elif action == "goto":
+        ui.goto(int(step["x"]), int(step["y"]))
+    elif action == "click":
+        xy = validate_optional_xy(step.get("x"), step.get("y"))
+        if xy:
+            ui.goto(*xy)
+            time.sleep(float(step.get("delay", 0.05)))
+        ui.click(str(step.get("button", "left")))
+    elif action == "scroll":
+        ui.scroll(int(step.get("vertical", 0)), int(step.get("horizontal", 0)))
+    elif action == "key":
+        ui.tap(key_code(str(step["name"])))
+    elif action == "hotkey":
+        ui.hotkey([key_code(x) for x in str(step["chord"]).split("+") if x])
+    elif action == "type":
+        ui.type_text(str(step.get("text", "")))
+    else:
+        raise ValueError(f"unknown input action: {action}")
+    return {"acted": action}
+
+
 def run_step(step: dict[str, object], output_dir: Path, index: int) -> dict[str, object]:
-    action = str(step.get("action") or step.get("type") or "").lower()
+    action = step_action(step)
     if not action:
         raise ValueError("step is missing action/type")
     if action == "sleep":
@@ -1110,31 +1218,11 @@ def run_step(step: dict[str, object], output_dir: Path, index: int) -> dict[str,
     if action == "paste":
         paste_text(text_from_step(step), bool(step.get("enter", False)))
         return {"pasted": True, "entered": bool(step.get("enter", False))}
-
-    def input_action(ui: UInput) -> None:
-        if action == "move":
-            ui.move(int(step.get("dx", 0)), int(step.get("dy", 0)))
-        elif action == "goto":
-            ui.goto(int(step["x"]), int(step["y"]))
-        elif action == "click":
-            xy = validate_optional_xy(step.get("x"), step.get("y"))
-            if xy:
-                ui.goto(*xy)
-                time.sleep(float(step.get("delay", 0.05)))
-            ui.click(str(step.get("button", "left")))
-        elif action == "scroll":
-            ui.scroll(int(step.get("vertical", 0)), int(step.get("horizontal", 0)))
-        elif action == "key":
-            ui.tap(key_code(str(step["name"])))
-        elif action == "hotkey":
-            ui.hotkey([key_code(x) for x in str(step["chord"]).split("+") if x])
-        elif action == "type":
-            ui.type_text(str(step.get("text", "")))
-        else:
-            raise ValueError(f"unknown sequence action: {action}")
-
-    uinput_action(input_action)
-    return {"acted": action}
+    if is_input_step(step):
+        result: dict[str, object] = {}
+        uinput_action(lambda ui: result.update(perform_input_step(ui, step)))
+        return result
+    raise ValueError(f"unknown sequence action: {action}")
 
 
 def sequence_cmd(args: argparse.Namespace) -> None:
@@ -1147,14 +1235,23 @@ def sequence_cmd(args: argparse.Namespace) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     events: list[dict[str, object]] = []
     ok = True
+    ui: UInput | None = None
     for index, step in enumerate(steps):
         if not isinstance(step, dict):
             raise SystemExit(f"sequence step {index} must be an object")
         started = now_ms()
-        action = str(step.get("action") or step.get("type") or "")
+        action = step_action(step)
         event: dict[str, object] = {"index": index, "action": action, "started_ms": started}
         try:
-            event["result"] = run_step(step, output_dir, index)
+            if is_input_step(step):
+                if ui is None:
+                    ui = UInput()
+                event["result"] = perform_input_step(ui, step)
+            else:
+                if ui is not None:
+                    ui.close()
+                    ui = None
+                event["result"] = run_step(step, output_dir, index)
             event["ok"] = True
         except SystemExit as exc:
             event["ok"] = False
@@ -1168,6 +1265,8 @@ def sequence_cmd(args: argparse.Namespace) -> None:
         events.append(event)
         if not event["ok"] and not args.continue_on_error:
             break
+    if ui is not None:
+        ui.close()
     payload = {"ok": ok, "events": events}
     output = brief_sequence(payload) if args.brief else payload
     emit_json(output, compact=args.compact, brief=args.brief)
@@ -1445,6 +1544,23 @@ def main() -> None:
     bp.add_argument("--output-dir", default="./agent-linux-control-vault")
     bp.add_argument("--compact", action="store_true", help="emit compact JSON")
     bp.set_defaults(func=brain_cmd)
+
+    p = sub.add_parser("bench", help="benchmark perception and input control loops")
+    bench_sub = p.add_subparsers(dest="bench_command", required=True)
+    bo = bench_sub.add_parser("observe", help="measure screenshot observation latency")
+    bo.add_argument("--count", type=int, default=5)
+    bo.add_argument("--output-dir", default="/tmp/agent-linux-control-bench")
+    bo.add_argument("--pointer", action="store_true")
+    bo.add_argument("--compact", action="store_true", help="emit compact JSON")
+    bo.add_argument("--brief", action="store_true", help="emit brief run payloads")
+    bo.set_defaults(func=bench_cmd)
+    bu = bench_sub.add_parser("uinput", help="measure uinput setup plus small pointer move latency")
+    bu.add_argument("--count", type=int, default=3)
+    bu.add_argument("--dx", type=int, default=1)
+    bu.add_argument("--dy", type=int, default=1)
+    bu.add_argument("--compact", action="store_true", help="emit compact JSON")
+    bu.add_argument("--brief", action="store_true", help="emit compact JSON")
+    bu.set_defaults(func=bench_cmd)
 
     p = sub.add_parser("move", help="move pointer by relative pixels")
     p.add_argument("dx", type=int)

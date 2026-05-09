@@ -116,6 +116,9 @@ The MCP server exposes `manifest`, `observe`, `click`, `type`, `paste`, `hotkey`
 - `docs/research-2026.md` - product/research notes behind the agent experience.
 - `docs/agent-os-architecture.md` - OS-style architecture for first-class agent integrations.
 - `docs/performance-token-economy.md` - brief payload and optional Rust acceleration criteria.
+- `docs/workspace-isolation.md` - direct desktop vs nested/remote workspace model.
+- `docs/dialog-handling.md` - recipes for onboarding, file pickers, permission prompts, and app modals.
+- `docs/benchmarks-2026-05-10.md` - current Fedora/KDE/Blender timing evidence.
 - `adapters/` - notes for Codex, Claude Code, Gemini CLI, OpenCode, Zen/browser targets, Pi/ARM Linux, and other agents.
 
 ## Safety

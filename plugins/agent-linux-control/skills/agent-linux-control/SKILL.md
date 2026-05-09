@@ -24,6 +24,8 @@ One CLI for Linux OS control. Prefer DOM/app APIs for web content; use this for 
 - Prefer `sequence --brief` for known multi-step plans; fewer tool calls, fewer tokens.
 - Prefer MCP `manifest/observe/sequence` with `{"brief":true}` when MCP available.
 - Journal redacts text payloads to length + SHA-256.
+- Prefer app-native APIs for real work inside apps; use desktop control for launch, dialogs, visual verification.
+- For long autonomous work, prefer isolated workspace when available; direct desktop shares user pointer/focus.
 
 ## Commands
 
