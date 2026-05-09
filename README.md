@@ -18,7 +18,7 @@ Local checkout:
 AGENT_LINUX_CONTROL_SOURCE_DIR="$PWD" ./install.sh
 ```
 
-The installer detects `dnf`, `apt-get`, `pacman`, `zypper`, or `apk`, installs useful tools when possible, adds a `/dev/uinput` uaccess rule when sudo is available, installs `agent-linux-control` into `~/.local/bin`, and installs the agent skill into common locations:
+The installer detects `dnf`, `apt-get`, `pacman`, `zypper`, or `apk`, installs useful tools when possible, adds a `/dev/uinput` uaccess rule when sudo is available, installs `agent-linux-control` into `~/.local/bin`, and installs the agent skill into common locations. From a local checkout, it also installs optional Rust `alc` and `alc-daemon` binaries when Cargo is available.
 
 - `~/.agents/skills/agent-linux-control`
 - `~/.codex/skills/agent-linux-control`
@@ -48,6 +48,8 @@ agent-linux-control watch --brief --count 10 --interval 0.5 --output-dir /tmp/al
 agent-linux-control journal tail --lines 5
 agent-linux-control brain export --output-dir ./agent-linux-control-vault
 ```
+
+If `alc-daemon` is running on `/tmp/agent-linux-control.sock`, input commands (`move`, `goto`, `click`, `scroll`, `key`, `hotkey`, `type`, `paste`, and input steps inside `sequence`) use the Rust daemon automatically and fall back to the Python `/dev/uinput` backend when the socket is unavailable. Set `AGENT_LINUX_CONTROL_NO_DAEMON=1` to force the Python path.
 
 Rust prototype:
 
@@ -120,7 +122,7 @@ The MCP server exposes `manifest`, `observe`, `click`, `type`, `paste`, `hotkey`
 ## Project Layout
 
 - `bin/agent-linux-control` - Python stdlib CLI; no daemon required.
-- `crates/` - Rust rewrite workspace: `alc-core` models/protocol, `alc` CLI prototype, and `alc-daemon` Unix-socket daemon prototype.
+- `crates/` - Rust rewrite workspace: `alc-core` models/protocol, `alc` CLI prototype, and `alc-daemon` Unix-socket daemon with persistent uinput.
 - `install.sh` - curl-friendly installer.
 - `skills/agent-linux-control/SKILL.md` - portable skill for agents.
 - `plugins/agent-linux-control/` - Codex plugin wrapper around the skill.

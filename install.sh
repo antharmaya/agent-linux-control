@@ -88,6 +88,17 @@ install_runtime() {
   mkdir -p "$BIN_DIR"
   fetch_or_copy "bin/agent-linux-control" "$BIN_DIR/agent-linux-control"
   chmod +x "$BIN_DIR/agent-linux-control"
+  if [ -n "$SOURCE_DIR" ] && [ -f "$SOURCE_DIR/Cargo.toml" ]; then
+    if have cargo; then
+      cargo build --release --manifest-path "$SOURCE_DIR/Cargo.toml" -p alc -p alc-daemon
+      cp "$SOURCE_DIR/target/release/alc" "$BIN_DIR/alc"
+      cp "$SOURCE_DIR/target/release/alc-daemon" "$BIN_DIR/alc-daemon"
+      chmod +x "$BIN_DIR/alc" "$BIN_DIR/alc-daemon"
+      info "installed Rust CLI and daemon: $BIN_DIR/alc, $BIN_DIR/alc-daemon"
+    else
+      warn "cargo not found; skipping optional Rust alc/alc-daemon install"
+    fi
+  fi
 }
 
 install_skill() {

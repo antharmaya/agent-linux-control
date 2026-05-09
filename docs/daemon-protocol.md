@@ -56,7 +56,7 @@ cargo run -q -p alc-daemon -- call --socket /tmp/agent-linux-control.sock '{"id"
 {"action":"type","text":"hello"}
 ```
 
-The daemon lazily opens `/dev/uinput` on first input command and keeps that virtual device alive for later requests.
+The daemon lazily opens `/dev/uinput` on first input command and keeps that virtual device alive for later requests. The Python `agent-linux-control` CLI automatically delegates input commands to this socket when it is available; set `AGENT_LINUX_CONTROL_NO_DAEMON=1` to force direct Python `/dev/uinput`.
 
 ## Response Shape
 
@@ -76,5 +76,4 @@ Error:
 
 1. Add `observe`, `paste`, `sequence`, and `watch` commands.
 2. Keep screenshot capture, diffing, journal, and input queues warm.
-3. Let the Python CLI delegate to the daemon when available and fall back to stdlib behavior otherwise.
-4. Put MCP on top of the same protocol so Codex, Claude Code, Gemini CLI, OpenCode, Goose, Qwen, and other agents see one consistent control surface.
+3. Put MCP on top of the same protocol so Codex, Claude Code, Gemini CLI, OpenCode, Goose, Qwen, and other agents see one consistent control surface.

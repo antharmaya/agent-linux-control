@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 import shutil
+import socket
 import subprocess
 import sys
 import time
@@ -19,7 +20,7 @@ import struct
 import fcntl
 from pathlib import Path
 
-VERSION = "0.4.0"
+VERSION = "0.5.0"
 
 EV_SYN = 0x00
 EV_KEY = 0x01
@@ -195,6 +196,7 @@ BROWSER_CANDIDATES = [
 ]
 
 INPUT_ACTIONS = {"move", "goto", "click", "scroll", "key", "hotkey", "type"}
+DEFAULT_DAEMON_SOCKET = "/tmp/agent-linux-control.sock"
 
 CAPABILITIES = [
     {
@@ -1051,6 +1053,89 @@ def key_code(name: str) -> int:
     raise SystemExit(f"unknown key: {name}")
 
 
+def daemon_socket_path() -> str:
+    return os.environ.get("AGENT_LINUX_CONTROL_DAEMON_SOCKET", DEFAULT_DAEMON_SOCKET)
+
+
+def daemon_step_from_step(step: dict[str, object]) -> dict[str, object]:
+    action = step_action(step)
+    if action == "move":
+        return {"action": "move", "dx": int(step.get("dx", 0)), "dy": int(step.get("dy", 0))}
+    if action == "goto":
+        return {"action": "goto", "x": int(step["x"]), "y": int(step["y"])}
+    if action == "click":
+        out: dict[str, object] = {"action": "click", "button": str(step.get("button", "left"))}
+        xy = validate_optional_xy(step.get("x"), step.get("y"))
+        if xy:
+            out["x"], out["y"] = xy
+            out["delay_ms"] = int(float(step.get("delay", 0.05)) * 1000)
+        return out
+    if action == "scroll":
+        return {
+            "action": "scroll",
+            "vertical": int(step.get("vertical", 0)),
+            "horizontal": int(step.get("horizontal", 0)),
+        }
+    if action == "key":
+        return {"action": "key", "name": str(step["name"])}
+    if action == "hotkey":
+        return {"action": "hotkey", "chord": str(step["chord"])}
+    if action == "type":
+        return {"action": "type", "text": str(step.get("text", ""))}
+    raise ValueError(f"unknown input action: {action}")
+
+
+def daemon_input_payload(steps: list[dict[str, object]], request_id: str | None = None) -> dict[str, object]:
+    return {
+        "id": request_id or f"py-{int(time.time() * 1000)}",
+        "cmd": "input",
+        "steps": steps,
+    }
+
+
+def daemon_call(payload: dict[str, object], socket_path: str | None = None, timeout: float = 0.2) -> dict[str, object] | None:
+    path = socket_path or daemon_socket_path()
+    data = json.dumps(payload, separators=(",", ":")).encode() + b"\n"
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+            client.settimeout(timeout)
+            client.connect(path)
+            client.sendall(data)
+            chunks: list[bytes] = []
+            while True:
+                chunk = client.recv(4096)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                if b"\n" in chunk:
+                    break
+    except (FileNotFoundError, ConnectionRefusedError, TimeoutError, socket.timeout, OSError):
+        return None
+    if not chunks:
+        return None
+    line = b"".join(chunks).split(b"\n", 1)[0]
+    if not line:
+        return None
+    return json.loads(line)
+
+
+def daemon_input_steps(steps: list[dict[str, object]], socket_path: str | None = None) -> bool:
+    if os.environ.get("AGENT_LINUX_CONTROL_NO_DAEMON"):
+        return False
+    response = daemon_call(daemon_input_payload(steps), socket_path=socket_path)
+    if response is None:
+        return False
+    if not response.get("ok"):
+        raise SystemExit(f"daemon input failed: {response.get('error', 'unknown error')}")
+    return True
+
+
+def input_steps_or_uinput(steps: list[dict[str, object]], fallback) -> None:
+    if daemon_input_steps(steps):
+        return
+    uinput_action(fallback)
+
+
 def uinput_action(action) -> None:
     try:
         with UInput() as ui:
@@ -1063,6 +1148,12 @@ def uinput_action(action) -> None:
 
 def paste_text(text: str, enter: bool = False) -> None:
     clipboard_set(text)
+
+    if daemon_input_steps([{"action": "hotkey", "chord": "ctrl+v"}]):
+        if enter:
+            time.sleep(0.05)
+            daemon_input_steps([{"action": "key", "name": "enter"}])
+        return
 
     def action(ui: UInput) -> None:
         ui.hotkey([KEY_LEFTCTRL, key_code("v")])
@@ -1236,6 +1327,7 @@ def sequence_cmd(args: argparse.Namespace) -> None:
     events: list[dict[str, object]] = []
     ok = True
     ui: UInput | None = None
+    try_daemon_input = not bool(os.environ.get("AGENT_LINUX_CONTROL_NO_DAEMON"))
     for index, step in enumerate(steps):
         if not isinstance(step, dict):
             raise SystemExit(f"sequence step {index} must be an object")
@@ -1244,9 +1336,16 @@ def sequence_cmd(args: argparse.Namespace) -> None:
         event: dict[str, object] = {"index": index, "action": action, "started_ms": started}
         try:
             if is_input_step(step):
-                if ui is None:
-                    ui = UInput()
-                event["result"] = perform_input_step(ui, step)
+                if try_daemon_input:
+                    daemon_step = daemon_step_from_step(step)
+                    if daemon_input_steps([daemon_step]):
+                        event["result"] = {"acted": action, "device": "daemon-uinput"}
+                    else:
+                        try_daemon_input = False
+                if "result" not in event:
+                    if ui is None:
+                        ui = UInput()
+                    event["result"] = perform_input_step(ui, step)
             else:
                 if ui is not None:
                     ui.close()
@@ -1565,12 +1664,22 @@ def main() -> None:
     p = sub.add_parser("move", help="move pointer by relative pixels")
     p.add_argument("dx", type=int)
     p.add_argument("dy", type=int)
-    p.set_defaults(func=lambda a: uinput_action(lambda ui: ui.move(a.dx, a.dy)))
+    p.set_defaults(
+        func=lambda a: input_steps_or_uinput(
+            [{"action": "move", "dx": a.dx, "dy": a.dy}],
+            lambda ui: ui.move(a.dx, a.dy),
+        )
+    )
 
     p = sub.add_parser("goto", help="move pointer to approximate absolute screen coordinates")
     p.add_argument("x", type=int)
     p.add_argument("y", type=int)
-    p.set_defaults(func=lambda a: uinput_action(lambda ui: ui.goto(a.x, a.y)))
+    p.set_defaults(
+        func=lambda a: input_steps_or_uinput(
+            [{"action": "goto", "x": a.x, "y": a.y}],
+            lambda ui: ui.goto(a.x, a.y),
+        )
+    )
 
     p = sub.add_parser("click", help="click a mouse button, optionally at coordinates")
     p.add_argument("button", choices=sorted(BUTTONS), nargs="?", default="left")
@@ -1587,25 +1696,49 @@ def main() -> None:
                 ui.goto(*xy)
                 time.sleep(0.05)
             ui.click(a.button)
-        uinput_action(action)
+        step: dict[str, object] = {"action": "click", "button": a.button}
+        if xy:
+            step["x"], step["y"] = xy
+            step["delay_ms"] = 50
+        input_steps_or_uinput([step], action)
     p.set_defaults(func=do_click)
 
     p = sub.add_parser("scroll", help="scroll vertically and optionally horizontally")
     p.add_argument("vertical", type=int)
     p.add_argument("horizontal", type=int, nargs="?", default=0)
-    p.set_defaults(func=lambda a: uinput_action(lambda ui: ui.scroll(a.vertical, a.horizontal)))
+    p.set_defaults(
+        func=lambda a: input_steps_or_uinput(
+            [{"action": "scroll", "vertical": a.vertical, "horizontal": a.horizontal}],
+            lambda ui: ui.scroll(a.vertical, a.horizontal),
+        )
+    )
 
     p = sub.add_parser("key", help="press and release a named key")
     p.add_argument("name")
-    p.set_defaults(func=lambda a: uinput_action(lambda ui: ui.tap(key_code(a.name))))
+    p.set_defaults(
+        func=lambda a: input_steps_or_uinput(
+            [{"action": "key", "name": a.name}],
+            lambda ui: ui.tap(key_code(a.name)),
+        )
+    )
 
     p = sub.add_parser("hotkey", help="press a key chord such as ctrl+l or alt+tab")
     p.add_argument("chord")
-    p.set_defaults(func=lambda a: uinput_action(lambda ui: ui.hotkey([key_code(x) for x in a.chord.split("+") if x])))
+    p.set_defaults(
+        func=lambda a: input_steps_or_uinput(
+            [{"action": "hotkey", "chord": a.chord}],
+            lambda ui: ui.hotkey([key_code(x) for x in a.chord.split("+") if x]),
+        )
+    )
 
     p = sub.add_parser("type", help="type ASCII text")
     p.add_argument("text")
-    p.set_defaults(func=lambda a: uinput_action(lambda ui: ui.type_text(a.text)))
+    p.set_defaults(
+        func=lambda a: input_steps_or_uinput(
+            [{"action": "type", "text": a.text}],
+            lambda ui: ui.type_text(a.text),
+        )
+    )
 
     p = sub.add_parser("paste", help="set clipboard and paste text with Ctrl+V")
     p.add_argument("text", nargs="?")

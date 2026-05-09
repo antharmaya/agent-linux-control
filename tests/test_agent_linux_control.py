@@ -158,6 +158,25 @@ class AgentLinuxControlTests(unittest.TestCase):
         self.assertTrue(alc.is_input_step({"type": "hotkey"}))
         self.assertFalse(alc.is_input_step({"action": "observe"}))
 
+    def test_daemon_step_normalizes_existing_input_shape(self):
+        self.assertEqual(
+            alc.daemon_step_from_step({"type": "click", "button": "right", "x": 10, "y": 20, "delay": 0.125}),
+            {"action": "click", "button": "right", "x": 10, "y": 20, "delay_ms": 125},
+        )
+        self.assertEqual(
+            alc.daemon_step_from_step({"action": "hotkey", "chord": "ctrl+l"}),
+            {"action": "hotkey", "chord": "ctrl+l"},
+        )
+
+    def test_daemon_input_payload_keeps_compact_protocol(self):
+        payload = alc.daemon_input_payload([{"action": "move", "dx": 1, "dy": 1}], request_id="t1")
+        self.assertEqual(payload, {"id": "t1", "cmd": "input", "steps": [{"action": "move", "dx": 1, "dy": 1}]})
+
+    def test_daemon_input_steps_returns_false_without_socket(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            missing = pathlib.Path(tmp) / "missing.sock"
+            self.assertFalse(alc.daemon_input_steps([{"action": "move", "dx": 1, "dy": 1}], socket_path=str(missing)))
+
 
 if __name__ == "__main__":
     unittest.main()
