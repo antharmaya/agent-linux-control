@@ -15,7 +15,7 @@ Goal: Rust becomes realtime agent-control engine. Python CLI remains compatibili
 |---|---|
 | `alc-core` | contracts, capability manifest, bench math, shared models |
 | `alc` | Rust CLI, eventually replaces Python `bin/agent-linux-control` |
-| `alc-daemon` | future persistent Unix-socket daemon: uinput device, watch loop, workspace sessions |
+| `alc-daemon` | persistent Unix-socket daemon prototype: protocol now, uinput/watch/workspace sessions next |
 | `alc-mcp` | future MCP server using official Rust SDK |
 
 ## Why Rust
@@ -46,13 +46,23 @@ For research itself, browser UI is slower than direct web/search tooling: more v
 
 ## Migration Steps
 
-1. Rust scaffold compiles: `alc-core`, `alc`.
-2. Port manifest, bench math, compact models.
-3. Add Rust daemon prototype with Unix socket.
+1. Rust scaffold compiles: `alc-core`, `alc`. Done.
+2. Port manifest, bench math, compact models. Done.
+3. Add Rust daemon prototype with Unix socket. Done: `alc-daemon` accepts JSONL requests and preserves response IDs.
 4. Port uinput to Rust daemon, benchmark against Python per-action setup.
 5. Add Python shim: if Rust binary exists, delegate compatible commands.
 6. Add MCP Rust server after command protocol stabilizes.
 7. Add workspace isolation adapters: nested compositor / VNC / app-native runners.
+
+## Current Daemon Smoke
+
+```sh
+./scripts/rust-smoke.sh
+cargo run -q -p alc-daemon -- serve --socket /tmp/agent-linux-control.sock
+cargo run -q -p alc-daemon -- call --socket /tmp/agent-linux-control.sock '{"id":"p1","cmd":"ping"}'
+```
+
+Protocol details live in `docs/daemon-protocol.md`.
 
 ## Non-Goals For First Rust Pass
 

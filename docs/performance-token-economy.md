@@ -13,6 +13,7 @@ Goal: make Linux desktop control feel realtime without wasting model context.
 - Skill file compressed from verbose prose to command-first instructions.
 - Wayland screenshots prefer `grim` when pointer capture is not requested.
 - `sequence` reuses one `/dev/uinput` device across consecutive input steps.
+- Rust `alc-daemon` prototype keeps a local Unix-socket process warm and returns compact JSONL responses with request IDs.
 
 ## Measured On Nobara/Fedora 43 KDE Wayland
 
@@ -49,7 +50,7 @@ Keep Python stdlib CLI as stable installer path until Rust reaches command parit
 
 Short term: Rust core models + CLI prototype, Python compatibility, batching, app-native adapters, isolated workspaces.
 
-Medium term: Rust daemon. Rust is a strong fit for persistent uinput, event loop, socket protocol, and high-frequency watch/diff. Python remains fallback control plane.
+Medium term: Rust daemon. The first daemon now exists with a small typed protocol; next target is moving persistent uinput and watch/diff state into it. Rust is a strong fit for persistent uinput, event loop, socket protocol, and high-frequency watch/diff. Python remains fallback control plane.
 
 ## Benchmarks To Add
 
@@ -58,3 +59,4 @@ Medium term: Rust daemon. Rust is a strong fit for persistent uinput, event loop
 - `bench sequence`: N action batch latency.
 - `bench mcp`: request/response overhead.
 - `bench tokens`: byte/token size of full vs brief outputs.
+- `bench daemon`: CLI-to-daemon round trip, long-lived client latency, concurrent client behavior.

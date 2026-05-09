@@ -54,6 +54,9 @@ Rust prototype:
 ```sh
 cargo run -q -p alc -- manifest --compact
 cargo run -q -p alc -- bench-summary 10 20 30
+cargo run -q -p alc-daemon -- serve --socket /tmp/agent-linux-control.sock
+cargo run -q -p alc-daemon -- call --socket /tmp/agent-linux-control.sock '{"id":"p1","cmd":"ping"}'
+./scripts/rust-smoke.sh
 ```
 
 ## Agent Loop
@@ -116,7 +119,7 @@ The MCP server exposes `manifest`, `observe`, `click`, `type`, `paste`, `hotkey`
 ## Project Layout
 
 - `bin/agent-linux-control` - Python stdlib CLI; no daemon required.
-- `crates/` - Rust rewrite workspace; currently `alc-core` models and `alc` CLI prototype.
+- `crates/` - Rust rewrite workspace: `alc-core` models/protocol, `alc` CLI prototype, and `alc-daemon` Unix-socket daemon prototype.
 - `install.sh` - curl-friendly installer.
 - `skills/agent-linux-control/SKILL.md` - portable skill for agents.
 - `plugins/agent-linux-control/` - Codex plugin wrapper around the skill.
@@ -124,6 +127,7 @@ The MCP server exposes `manifest`, `observe`, `click`, `type`, `paste`, `hotkey`
 - `docs/research-2026.md` - product/research notes behind the agent experience.
 - `docs/agent-os-architecture.md` - OS-style architecture for first-class agent integrations.
 - `docs/performance-token-economy.md` - brief payload and optional Rust acceleration criteria.
+- `docs/daemon-protocol.md` - JSONL Unix-socket protocol for the Rust realtime daemon.
 - `docs/workspace-isolation.md` - direct desktop vs nested/remote workspace model.
 - `docs/dialog-handling.md` - recipes for onboarding, file pickers, permission prompts, and app modals.
 - `docs/benchmarks-2026-05-10.md` - current Fedora/KDE/Blender timing evidence.

@@ -21,6 +21,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "alc-daemon"
+version = "0.1.0"
+dependencies = [
+ "alc-core",
+ "anyhow",
+ "clap",
+ "serde_json",
+]
+
+[[package]]
 name = "anstream"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

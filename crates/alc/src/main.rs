@@ -17,9 +17,7 @@ enum Command {
         compact: bool,
     },
     /// Summarize synthetic benchmark samples. Used to verify Rust core math.
-    BenchSummary {
-        samples: Vec<f64>,
-    },
+    BenchSummary { samples: Vec<f64> },
 }
 
 fn main() -> Result<()> {
@@ -34,7 +32,10 @@ fn main() -> Result<()> {
             }
         }
         Command::BenchSummary { samples } => {
-            println!("{}", serde_json::to_string(&alc_core::benchmark_summary(&samples))?);
+            println!(
+                "{}",
+                serde_json::to_string(&alc_core::benchmark_summary(&samples))?
+            );
         }
     }
     Ok(())

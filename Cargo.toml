@@ -2,6 +2,7 @@
 members = [
   "crates/alc",
   "crates/alc-core",
+  "crates/alc-daemon",
 ]
 resolver = "2"
 
