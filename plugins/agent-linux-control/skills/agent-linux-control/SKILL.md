@@ -14,24 +14,43 @@ For browser work in Zen, Chrome, Firefox, or Electron apps, prefer DOM/browser a
 ## Startup
 
 1. Run `agent-linux-control doctor`.
-2. Capture before acting: `agent-linux-control screenshot --output /tmp/alc-screen.png`.
+2. Capture before acting: `agent-linux-control observe --output /tmp/alc-screen.png`.
 3. Inspect the screenshot with the image viewer available to the agent.
-4. Move/click/type in small steps, then capture again.
+4. Move/click/type in small steps, or use `sequence` for an atomic batch.
+5. Verify with `agent-linux-control observe` or `agent-linux-control wait-change`.
+
+## Smooth Agent Loop
+
+- Use `observe` instead of raw `screenshot` when possible; it returns image path, dimensions, hash, desktop/session data, and tool readiness in one JSON payload.
+- Use `paste` for long text. It sets the clipboard and presses Ctrl+V, which is more reliable than keying long strings.
+- Use `sequence` when you know the next few steps. It batches actions like click/paste/hotkey/sleep/observe and returns structured results.
+- Use `watch` for realtime-ish monitoring while a UI is loading.
+- Use `wait-change` after clicks, browser launches, reloads, and other UI transitions.
+- Use `browser --prefer chrome|chromium|zen|firefox URL` to launch a supported local browser directly. Add `--require-prefer` when fallback to another browser would be wrong.
+- If the agent supports MCP, configure `agent-linux-control mcp` as a stdio MCP server and prefer the MCP tools for structured calls.
 
 ## Commands
 
-- Screenshot: `agent-linux-control screenshot --output /tmp/alc.png`
+- Observe: `agent-linux-control observe --output /tmp/alc.png`
+- Screenshot only: `agent-linux-control screenshot --output /tmp/alc.png`
 - Screenshot with pointer when supported: `agent-linux-control screenshot --pointer --output /tmp/alc.png`
+- Watch screen changes: `agent-linux-control watch --count 10 --interval 0.5 --output-dir /tmp/alc-watch`
+- Wait for visible change: `agent-linux-control wait-change --timeout 10 --output /tmp/alc-changed.png`
 - Move relative: `agent-linux-control move 200 0`
 - Approximate absolute move: `agent-linux-control goto 900 600`
 - Click current pointer: `agent-linux-control click left`
 - Click coordinates: `agent-linux-control click left --x 900 --y 600`
 - Scroll: `agent-linux-control scroll -5`
 - Type text: `agent-linux-control type "hello"`
+- Paste text: `agent-linux-control paste "hello"`
 - Press key: `agent-linux-control key enter`
 - Hotkey: `agent-linux-control hotkey ctrl+l`
 - Clipboard set: `agent-linux-control clipboard set "text"`
 - Clipboard get: `agent-linux-control clipboard get`
+- Browser launch: `agent-linux-control browser --prefer chrome https://example.com`
+- Strict browser launch: `agent-linux-control browser --prefer chrome --require-prefer https://example.com`
+- Batched actions: `agent-linux-control sequence --file plan.json`
+- MCP server: `agent-linux-control mcp`
 - Open URL/file: `agent-linux-control open https://example.com`
 
 ## Operating Rules

@@ -7,16 +7,21 @@
 - Skill path: `~/.codex/skills/agent-linux-control/SKILL.md`
 - Plugin path in this repo: `plugins/agent-linux-control`
 - Primary command: `agent-linux-control doctor`
+- Smooth loop: `observe` -> inspect screenshot -> `sequence` -> `wait-change`/`observe`.
+- If the host supports MCP tools, run `agent-linux-control mcp` as a stdio MCP server.
 
 ## Claude Code
 
 - Skill path: `~/.claude/skills/agent-linux-control/SKILL.md`
 - If Claude does not auto-load skills in a setup, add a short `CLAUDE.md` instruction: "Use `agent-linux-control` for Linux desktop screenshots, mouse, keyboard, and clipboard control."
+- Claude Code can also use `examples/mcp.json` as a project `.mcp.json` entry.
+- For hooks, prefer observing or verifying in background hooks; do not let hooks type secrets or approve prompts.
 
 ## Gemini CLI
 
 - Skill path: `~/.gemini/skills/agent-linux-control/SKILL.md`
 - If the CLI uses project memory instead of skills, link or paste the skill in the project instruction file.
+- If MCP is available in the host setup, expose `agent-linux-control mcp`; otherwise use the CLI directly.
 
 ## OpenCode
 
@@ -28,6 +33,7 @@
 - Zen is treated as an app target, not an agent runtime.
 - Prefer Playwright, browser devtools, or DOM-level automation for web content.
 - Use `agent-linux-control` for browser chrome, downloads, file pickers, extension popups, permission dialogs, and visual checks that DOM tools cannot see.
+- Use `agent-linux-control browser --prefer zen URL` to launch Zen directly when installed.
 
 ## Raspberry Pi / ARM Linux
 
@@ -45,3 +51,4 @@
 - Generic path: `~/.agents/skills/agent-linux-control/SKILL.md`
 - Any agent with shell access can run `agent-linux-control` directly.
 - Any agent without a skill loader can be given the skill file as persistent instructions.
+- Any MCP-capable agent can use `agent-linux-control mcp` with the config in `examples/mcp.json`.

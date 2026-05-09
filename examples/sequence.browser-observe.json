@@ -1,0 +1,21 @@
+{
+  "steps": [
+    {
+      "action": "observe",
+      "output": "/tmp/agent-linux-control-before.png"
+    },
+    {
+      "action": "browser",
+      "url": "https://reddit.com",
+      "prefer": "chrome",
+      "require_prefer": true,
+      "new_window": true
+    },
+    {
+      "action": "wait-change",
+      "timeout": 10,
+      "interval": 0.5,
+      "output": "/tmp/agent-linux-control-after.png"
+    }
+  ]
+}
