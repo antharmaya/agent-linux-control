@@ -177,6 +177,67 @@ class AgentLinuxControlTests(unittest.TestCase):
             missing = pathlib.Path(tmp) / "missing.sock"
             self.assertFalse(alc.daemon_input_steps([{"action": "move", "dx": 1, "dy": 1}], socket_path=str(missing)))
 
+    def test_daemon_connection_reuses_one_socket(self):
+        class FakeSocket:
+            def __init__(self):
+                self.connects = 0
+                self.sent = []
+                self.responses = [b'{"ok":true,"id":"a"}\n', b'{"ok":true,"id":"b"}\n']
+
+            def settimeout(self, _timeout):
+                pass
+
+            def connect(self, _path):
+                self.connects += 1
+
+            def sendall(self, data):
+                self.sent.append(data)
+
+            def recv(self, _size):
+                return self.responses.pop(0)
+
+            def close(self):
+                pass
+
+        fake = FakeSocket()
+        conn = alc.DaemonConnection("/tmp/fake.sock", socket_factory=lambda *_args: fake)
+        self.assertEqual(conn.call({"id": "a", "cmd": "ping"})["id"], "a")
+        self.assertEqual(conn.call({"id": "b", "cmd": "ping"})["id"], "b")
+        self.assertEqual(fake.connects, 1)
+        self.assertEqual(len(fake.sent), 2)
+
+    def test_bench_daemon_roundtrip_uses_one_connection(self):
+        class FakeConnection:
+            def __init__(self):
+                self.calls = []
+
+            def call(self, payload):
+                self.calls.append(payload)
+                return {"ok": True, "id": payload["id"], "result": {"acted": "input"}}
+
+        conn = FakeConnection()
+        payload = alc.bench_daemon_roundtrip(3, [{"action": "move", "dx": 1, "dy": 0}], conn)
+        self.assertEqual(payload["bench"], "daemon")
+        self.assertEqual(payload["count"], 3)
+        self.assertIn("warm", payload)
+        self.assertEqual(len(payload["runs"]), 3)
+        self.assertEqual(len(conn.calls), 3)
+        self.assertTrue(all(call["cmd"] == "input" for call in conn.calls))
+
+    def test_run_step_uses_daemon_for_input_when_available(self):
+        original_daemon_input_steps = alc.daemon_input_steps
+        original_uinput_action = alc.uinput_action
+        try:
+            calls = []
+            alc.daemon_input_steps = lambda steps: calls.append(steps) or True
+            alc.uinput_action = lambda _action: (_ for _ in ()).throw(AssertionError("fallback should not run"))
+            result = alc.run_step({"action": "move", "dx": 1, "dy": 0}, pathlib.Path("/tmp"), 0)
+            self.assertEqual(result, {"acted": "move", "device": "daemon-uinput"})
+            self.assertEqual(calls, [[{"action": "move", "dx": 1, "dy": 0}]])
+        finally:
+            alc.daemon_input_steps = original_daemon_input_steps
+            alc.uinput_action = original_uinput_action
+
 
 if __name__ == "__main__":
     unittest.main()

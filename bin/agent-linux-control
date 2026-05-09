@@ -20,7 +20,7 @@ import struct
 import fcntl
 from pathlib import Path
 
-VERSION = "0.5.0"
+VERSION = "0.5.1"
 
 EV_SYN = 0x00
 EV_KEY = 0x01
@@ -197,6 +197,7 @@ BROWSER_CANDIDATES = [
 
 INPUT_ACTIONS = {"move", "goto", "click", "scroll", "key", "hotkey", "type"}
 DEFAULT_DAEMON_SOCKET = "/tmp/agent-linux-control.sock"
+_DAEMON_CONNECTION: "DaemonConnection | None" = None
 
 CAPABILITIES = [
     {
@@ -977,11 +978,50 @@ def bench_uinput(args: argparse.Namespace) -> dict[str, object]:
     }
 
 
+def bench_daemon_roundtrip(
+    count: int,
+    steps: list[dict[str, object]],
+    connection: DaemonConnection,
+) -> dict[str, object]:
+    samples: list[float] = []
+    runs: list[dict[str, object]] = []
+    for index in range(count):
+        payload = daemon_input_payload(steps, request_id=f"bench-{index}")
+        started = time.perf_counter()
+        response = connection.call(payload)
+        wall_ms = (time.perf_counter() - started) * 1000
+        if response is None:
+            raise SystemExit("daemon benchmark failed: no response")
+        if not response.get("ok"):
+            raise SystemExit(f"daemon benchmark failed: {response.get('error', 'unknown error')}")
+        samples.append(wall_ms)
+        runs.append({"i": index, "wall_ms": round(wall_ms, 2)})
+    return {
+        "bench": "daemon",
+        "version": VERSION,
+        "count": count,
+        "wall": benchmark_summary(samples),
+        "warm": benchmark_summary(samples[1:]),
+        "runs": runs,
+    }
+
+
+def bench_daemon(args: argparse.Namespace) -> dict[str, object]:
+    steps = [{"action": "move", "dx": args.dx, "dy": args.dy}]
+    connection = DaemonConnection(args.socket or daemon_socket_path(), timeout=args.timeout)
+    try:
+        return bench_daemon_roundtrip(args.count, steps, connection)
+    finally:
+        connection.close()
+
+
 def bench_cmd(args: argparse.Namespace) -> None:
     if args.bench_command == "observe":
         payload = bench_observe(args)
     elif args.bench_command == "uinput":
         payload = bench_uinput(args)
+    elif args.bench_command == "daemon":
+        payload = bench_daemon(args)
     else:
         raise SystemExit(f"unknown bench command: {args.bench_command}")
     emit_json(payload, compact=args.compact, brief=args.brief)
@@ -1093,36 +1133,89 @@ def daemon_input_payload(steps: list[dict[str, object]], request_id: str | None 
     }
 
 
-def daemon_call(payload: dict[str, object], socket_path: str | None = None, timeout: float = 0.2) -> dict[str, object] | None:
-    path = socket_path or daemon_socket_path()
-    data = json.dumps(payload, separators=(",", ":")).encode() + b"\n"
-    try:
-        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-            client.settimeout(timeout)
-            client.connect(path)
+class DaemonConnection:
+    def __init__(self, socket_path: str | None = None, timeout: float = 0.2, socket_factory=None) -> None:
+        self.socket_path = socket_path or daemon_socket_path()
+        self.timeout = timeout
+        self.socket_factory = socket_factory or socket.socket
+        self.client = None
+        self.buffer = b""
+
+    def close(self) -> None:
+        if self.client is not None:
+            try:
+                self.client.close()
+            finally:
+                self.client = None
+                self.buffer = b""
+
+    def _connect(self):
+        if self.client is None:
+            client = self.socket_factory(socket.AF_UNIX, socket.SOCK_STREAM)
+            try:
+                client.settimeout(self.timeout)
+                client.connect(self.socket_path)
+            except Exception:
+                client.close()
+                raise
+            self.client = client
+        return self.client
+
+    def call(self, payload: dict[str, object]) -> dict[str, object] | None:
+        data = json.dumps(payload, separators=(",", ":")).encode() + b"\n"
+        try:
+            client = self._connect()
             client.sendall(data)
-            chunks: list[bytes] = []
-            while True:
+            while b"\n" not in self.buffer:
                 chunk = client.recv(4096)
                 if not chunk:
-                    break
-                chunks.append(chunk)
-                if b"\n" in chunk:
-                    break
-    except (FileNotFoundError, ConnectionRefusedError, TimeoutError, socket.timeout, OSError):
-        return None
-    if not chunks:
-        return None
-    line = b"".join(chunks).split(b"\n", 1)[0]
-    if not line:
-        return None
-    return json.loads(line)
+                    self.close()
+                    return None
+                self.buffer += chunk
+            line, self.buffer = self.buffer.split(b"\n", 1)
+            if not line:
+                return None
+            return json.loads(line)
+        except (FileNotFoundError, ConnectionRefusedError, TimeoutError, socket.timeout, OSError, json.JSONDecodeError):
+            self.close()
+            return None
 
 
-def daemon_input_steps(steps: list[dict[str, object]], socket_path: str | None = None) -> bool:
+def daemon_connection(timeout: float = 0.2) -> DaemonConnection:
+    global _DAEMON_CONNECTION
+    path = daemon_socket_path()
+    if _DAEMON_CONNECTION is None or _DAEMON_CONNECTION.socket_path != path:
+        if _DAEMON_CONNECTION is not None:
+            _DAEMON_CONNECTION.close()
+        _DAEMON_CONNECTION = DaemonConnection(path, timeout)
+    return _DAEMON_CONNECTION
+
+
+def daemon_call(
+    payload: dict[str, object],
+    socket_path: str | None = None,
+    timeout: float = 0.2,
+    connection: DaemonConnection | None = None,
+) -> dict[str, object] | None:
+    if connection is not None:
+        return connection.call(payload)
+    if socket_path is None:
+        return daemon_connection(timeout).call(payload)
+    client = DaemonConnection(socket_path, timeout)
+    try:
+        return client.call(payload)
+    finally:
+        client.close()
+
+
+def daemon_input_steps(
+    steps: list[dict[str, object]],
+    socket_path: str | None = None,
+    connection: DaemonConnection | None = None,
+) -> bool:
     if os.environ.get("AGENT_LINUX_CONTROL_NO_DAEMON"):
         return False
-    response = daemon_call(daemon_input_payload(steps), socket_path=socket_path)
+    response = daemon_call(daemon_input_payload(steps), socket_path=socket_path, connection=connection)
     if response is None:
         return False
     if not response.get("ok"):
@@ -1310,6 +1403,9 @@ def run_step(step: dict[str, object], output_dir: Path, index: int) -> dict[str,
         paste_text(text_from_step(step), bool(step.get("enter", False)))
         return {"pasted": True, "entered": bool(step.get("enter", False))}
     if is_input_step(step):
+        daemon_step = daemon_step_from_step(step)
+        if daemon_input_steps([daemon_step]):
+            return {"acted": action, "device": "daemon-uinput"}
         result: dict[str, object] = {}
         uinput_action(lambda ui: result.update(perform_input_step(ui, step)))
         return result
@@ -1660,6 +1756,15 @@ def main() -> None:
     bu.add_argument("--compact", action="store_true", help="emit compact JSON")
     bu.add_argument("--brief", action="store_true", help="emit compact JSON")
     bu.set_defaults(func=bench_cmd)
+    bd = bench_sub.add_parser("daemon", help="measure long-lived daemon socket input latency")
+    bd.add_argument("--count", type=int, default=10)
+    bd.add_argument("--dx", type=int, default=1)
+    bd.add_argument("--dy", type=int, default=0)
+    bd.add_argument("--socket", default=None)
+    bd.add_argument("--timeout", type=float, default=0.5)
+    bd.add_argument("--compact", action="store_true", help="emit compact JSON")
+    bd.add_argument("--brief", action="store_true", help="emit compact JSON")
+    bd.set_defaults(func=bench_cmd)
 
     p = sub.add_parser("move", help="move pointer by relative pixels")
     p.add_argument("dx", type=int)

@@ -22,7 +22,7 @@ One CLI for Linux OS control. Prefer DOM/app APIs for web content; use this for 
 - Prefer `--brief` for agent loops. Use full JSON only when diagnosing.
 - Prefer `paste` over `type` for long text.
 - Prefer `sequence --brief` for known multi-step plans; fewer tool calls, fewer tokens.
-- If `alc-daemon` is running, CLI input commands auto-use it; otherwise Python `/dev/uinput` fallback runs.
+- If `alc-daemon` is running, CLI and MCP input commands auto-use it; otherwise Python `/dev/uinput` fallback runs.
 - Prefer MCP `manifest/observe/sequence` with `{"brief":true}` when MCP available.
 - Journal redacts text payloads to length + SHA-256.
 - Prefer app-native APIs for real work inside apps; use desktop control for launch, dialogs, visual verification.
@@ -46,6 +46,7 @@ One CLI for Linux OS control. Prefer DOM/app APIs for web content; use this for 
 - Clipboard: `agent-linux-control clipboard set "text"` / `agent-linux-control clipboard get`
 - Browser: `agent-linux-control browser --prefer chrome --require-prefer https://example.com`
 - Batch: `agent-linux-control sequence --brief --file plan.json`
+- Daemon bench: `agent-linux-control bench daemon --count 8`
 - MCP: `agent-linux-control mcp`
 - Journal: `agent-linux-control journal tail --lines 10`
 - Obsidian: `agent-linux-control brain export --output-dir ./agent-linux-control-vault`

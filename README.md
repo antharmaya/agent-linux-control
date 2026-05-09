@@ -47,9 +47,10 @@ agent-linux-control browser --prefer chrome --require-prefer https://reddit.com
 agent-linux-control watch --brief --count 10 --interval 0.5 --output-dir /tmp/alc-watch
 agent-linux-control journal tail --lines 5
 agent-linux-control brain export --output-dir ./agent-linux-control-vault
+agent-linux-control bench daemon --count 8
 ```
 
-If `alc-daemon` is running on `/tmp/agent-linux-control.sock`, input commands (`move`, `goto`, `click`, `scroll`, `key`, `hotkey`, `type`, `paste`, and input steps inside `sequence`) use the Rust daemon automatically and fall back to the Python `/dev/uinput` backend when the socket is unavailable. Set `AGENT_LINUX_CONTROL_NO_DAEMON=1` to force the Python path.
+If `alc-daemon` is running on `/tmp/agent-linux-control.sock`, input commands (`move`, `goto`, `click`, `scroll`, `key`, `hotkey`, `type`, `paste`, input steps inside `sequence`, and MCP input tools) use the Rust daemon automatically and fall back to the Python `/dev/uinput` backend when the socket is unavailable. Set `AGENT_LINUX_CONTROL_NO_DAEMON=1` to force the Python path.
 
 Rust prototype:
 

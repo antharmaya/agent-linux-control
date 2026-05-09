@@ -50,8 +50,8 @@ For research itself, browser UI is slower than direct web/search tooling: more v
 2. Port manifest, bench math, compact models. Done.
 3. Add Rust daemon prototype with Unix socket. Done: `alc-daemon` accepts JSONL requests and preserves response IDs.
 4. Port uinput to Rust daemon, benchmark against Python per-action setup. Done: warm daemon input averaged ~0.38 ms vs Python per-action ~827.57 ms.
-5. Add Python shim: if Rust daemon socket exists, delegate compatible commands. Done for input commands and input steps inside `sequence`.
-6. Add MCP Rust server after command protocol stabilizes.
+5. Add Python shim: if Rust daemon socket exists, delegate compatible commands. Done for input commands, MCP input tools, and input steps inside `sequence`.
+6. Add Rust-native MCP server after more daemon protocol commands stabilize.
 7. Add workspace isolation adapters: nested compositor / VNC / app-native runners.
 
 ## Current Daemon Smoke
@@ -62,6 +62,7 @@ cargo run -q -p alc-daemon -- serve --socket /tmp/agent-linux-control.sock
 cargo run -q -p alc-daemon -- call --socket /tmp/agent-linux-control.sock '{"id":"p1","cmd":"ping"}'
 cargo run -q -p alc-daemon -- call --socket /tmp/agent-linux-control.sock '{"id":"i1","cmd":"input","steps":[{"action":"move","dx":1,"dy":1}]}'
 AGENT_LINUX_CONTROL_DAEMON_SOCKET=/tmp/agent-linux-control.sock agent-linux-control move 1 1
+AGENT_LINUX_CONTROL_DAEMON_SOCKET=/tmp/agent-linux-control.sock agent-linux-control bench daemon --count 8
 ```
 
 Protocol details live in `docs/daemon-protocol.md`.

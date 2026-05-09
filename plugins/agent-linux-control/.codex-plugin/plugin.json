@@ -1,6 +1,6 @@
 {
   "name": "agent-linux-control",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Premium Linux desktop-control toolkit for coding agents: token-efficient brief mode, manifest, realtime observe/watch loops, daemon-accelerated mouse and keyboard, clipboard paste, browser launch, MCP, batched sequences, privacy-safe journal, Obsidian brain export, and readiness checks.",
   "author": {
     "name": "Antharmaya Labs",

@@ -42,7 +42,7 @@ This project should implement those ideas as portable Linux infrastructure rathe
 ## Next First-Class Upgrades
 
 1. Move realtime core to Rust: `alc-core`, `alc`, `alc-daemon`.
-2. Put MCP on the Rust daemon protocol for long-lived low-latency calls.
+2. Move screenshot/watch/journal paths into the daemon protocol.
 3. Add workspace isolation: nested compositor, VNC/xpra, app-native adapters.
 4. Add dialog detection/recipes for app modals.
 5. Add window/app discovery: `window-list`, `active-window`, `focus`.

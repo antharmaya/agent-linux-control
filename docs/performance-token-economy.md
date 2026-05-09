@@ -29,6 +29,7 @@ Goal: make Linux desktop control feel realtime without wasting model context.
 | 3 input actions in one `sequence --brief` | ~918 ms total |
 | Rust daemon first input call | ~51.2 ms with 50 ms smoke device delay |
 | Rust daemon warm input call over one socket | ~0.38 ms avg |
+| `bench daemon --count 8` warm input | ~0.24 ms avg |
 | Python CLI delegating to Rust daemon | ~172.49 ms first, ~104.53 ms warm avg |
 | Python per-action uinput after daemon benchmark | ~827.57 ms avg |
 | Blender background startup + script | ~2.09 s wall |
@@ -54,7 +55,7 @@ Keep Python stdlib CLI as stable installer path until Rust reaches command parit
 
 Short term: Rust core models + CLI prototype, Python compatibility, batching, app-native adapters, isolated workspaces.
 
-Medium term: Rust daemon. The daemon now owns a lazy persistent uinput device and the Python CLI delegates compatible input actions to it when available. Next target is watch/diff state plus MCP on the same socket. Rust is a strong fit for persistent uinput, event loop, socket protocol, and high-frequency watch/diff. Python remains fallback control plane.
+Medium term: Rust daemon. The daemon now owns a lazy persistent uinput device, and the Python CLI plus MCP input tools delegate compatible input actions to it when available. Next target is watch/diff state plus more MCP commands on the same socket. Rust is a strong fit for persistent uinput, event loop, socket protocol, and high-frequency watch/diff. Python remains fallback control plane.
 
 ## Benchmarks To Add
 
@@ -63,4 +64,5 @@ Medium term: Rust daemon. The daemon now owns a lazy persistent uinput device an
 - `bench sequence`: N action batch latency.
 - `bench mcp`: request/response overhead.
 - `bench tokens`: byte/token size of full vs brief outputs.
-- `bench daemon`: CLI-to-daemon round trip, long-lived client latency, concurrent client behavior.
+- `bench daemon`: CLI-to-daemon long-lived client latency; now available.
+- Concurrent daemon client behavior under mixed observe/input load.
