@@ -2,7 +2,7 @@
 set -eu
 
 PROJECT_NAME="agent-linux-control"
-DEFAULT_BASE_URL="https://raw.githubusercontent.com/antharmaya-labs/agent-linux-control/main"
+DEFAULT_BASE_URL="https://raw.githubusercontent.com/antharmaya/agent-linux-control/main"
 BASE_URL="${AGENT_LINUX_CONTROL_BASE_URL:-$DEFAULT_BASE_URL}"
 PREFIX="${AGENT_LINUX_CONTROL_PREFIX:-$HOME/.local}"
 BIN_DIR="$PREFIX/bin"

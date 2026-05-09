@@ -48,7 +48,7 @@ For browser work in Zen, Chrome, Firefox, or Electron apps, prefer DOM/browser a
 For a published repo:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/antharmaya-labs/agent-linux-control/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/antharmaya/agent-linux-control/main/install.sh | sh
 ```
 
 For a local checkout:

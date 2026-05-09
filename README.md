@@ -9,7 +9,7 @@ The goal is plug-and-play computer control for Linux agents in the same spirit a
 Published repo:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/antharmaya-labs/agent-linux-control/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/antharmaya/agent-linux-control/main/install.sh | sh
 ```
 
 Local checkout:
