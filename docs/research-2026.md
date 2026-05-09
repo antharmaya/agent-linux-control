@@ -19,6 +19,7 @@ These notes shape the product direction for `agent-linux-control`.
 - Interoperability needs both skills and MCP. Skills teach the workflow; `agent-linux-control mcp` gives structured tools to clients that support MCP.
 - First-class agents need a machine-readable contract. `manifest` exposes capability, risk, and recovery metadata so agents do not have to infer tool semantics from help text.
 - Recovery needs memory. `journal` records privacy-safe JSONL events, and `brain export` turns the control layer into an Obsidian graph for skill development and validation review.
+- Token economy is product quality. Repeated loops should use `--brief`, compact MCP payloads, compressed skill instructions, and stable short keys. Full JSON stays available for diagnosis.
 - Linux must stay boring to install. Keep the runtime Python-stdlib-only and keep the curl installer cross-distro.
 
 ## Source Links

@@ -80,6 +80,67 @@ class AgentLinuxControlTests(unittest.TestCase):
         self.assertIn("Capabilities.md", names)
         self.assertIn("Validation Matrix.md", names)
 
+    def test_brief_manifest_is_smaller_and_keeps_contract(self):
+        full = alc.agent_manifest()
+        brief = alc.brief_manifest(full)
+        self.assertEqual(brief["v"], full["version"])
+        self.assertIn(["observe", "r", "screen-read"], brief["caps"])
+        self.assertLess(len(str(brief)), len(str(full)) // 2)
+
+    def test_brief_observation_keeps_only_agent_critical_fields(self):
+        obs = {
+            "version": "0.4.0",
+            "duration_ms": 42,
+            "desktop": {
+                "session_type": "wayland",
+                "desktop": "KDE",
+                "uinput_writable": True,
+            },
+            "screenshot": {
+                "path": "/tmp/s.png",
+                "width": 1920,
+                "height": 2160,
+                "bytes": 100,
+                "sha256": "abcdef123456",
+            },
+        }
+        brief = alc.brief_observation(obs)
+        self.assertEqual(brief["v"], "0.4.0")
+        self.assertEqual(brief["shot"], "/tmp/s.png")
+        self.assertEqual(brief["size"], "1920x2160")
+        self.assertEqual(brief["uinput"], "rw")
+        self.assertNotIn("desktop", brief)
+
+    def test_mcp_text_can_emit_compact_json(self):
+        response = alc.mcp_text({"long": [1, 2, 3]}, compact=True)
+        text = response["content"][0]["text"]
+        self.assertEqual(text, '{"long":[1,2,3]}')
+
+    def test_wayland_screenshot_prefers_grim_without_pointer(self):
+        original_have = alc.have
+        original_session_type = alc.session_type
+        try:
+            alc.have = lambda name: name in {"grim", "spectacle"}
+            alc.session_type = lambda: "wayland"
+            commands = alc.screenshot_commands("/tmp/screen.png", pointer=False)
+            self.assertEqual(commands[0][0], "grim")
+        finally:
+            alc.have = original_have
+            alc.session_type = original_session_type
+
+    def test_pointer_screenshot_prefers_spectacle_when_available(self):
+        original_have = alc.have
+        original_session_type = alc.session_type
+        try:
+            alc.have = lambda name: name in {"grim", "spectacle"}
+            alc.session_type = lambda: "wayland"
+            commands = alc.screenshot_commands("/tmp/screen.png", pointer=True)
+            self.assertEqual(commands[0][0], "spectacle")
+            self.assertIn("-p", commands[0])
+        finally:
+            alc.have = original_have
+            alc.session_type = original_session_type
+
 
 if __name__ == "__main__":
     unittest.main()

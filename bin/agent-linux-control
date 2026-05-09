@@ -19,7 +19,7 @@ import struct
 import fcntl
 from pathlib import Path
 
-VERSION = "0.3.0"
+VERSION = "0.4.0"
 
 EV_SYN = 0x00
 EV_KEY = 0x01
@@ -446,6 +446,10 @@ def stdout_json(payload: object, pretty: bool = True) -> None:
         print(json.dumps(payload, sort_keys=True))
 
 
+def emit_json(payload: object, compact: bool = False, brief: bool = False) -> None:
+    stdout_json(payload, pretty=not (compact or brief))
+
+
 def now_ms() -> int:
     return int(time.time() * 1000)
 
@@ -537,8 +541,24 @@ def agent_manifest() -> dict[str, object]:
     }
 
 
+def brief_manifest(manifest: dict[str, object] | None = None) -> dict[str, object]:
+    source = manifest or agent_manifest()
+    caps = [
+        [item["name"], "r" if item["read_only"] else "w", item["risk"]]
+        for item in source["capabilities"]  # type: ignore[index]
+    ]
+    return {
+        "v": source["version"],
+        "loop": ["doctor", "observe", "act", "verify"],
+        "caps": caps,
+        "journal": source["journal"]["path"],  # type: ignore[index]
+        "obsidian": "agent-linux-control brain export --output-dir ./agent-linux-control-vault",
+    }
+
+
 def manifest_cmd(args: argparse.Namespace) -> None:
-    stdout_json(agent_manifest(), pretty=not args.compact)
+    payload = brief_manifest() if args.brief else agent_manifest()
+    emit_json(payload, compact=args.compact, brief=args.brief)
 
 
 def png_size(path: Path) -> tuple[int | None, int | None]:
@@ -589,25 +609,32 @@ def desktop_state() -> dict[str, object]:
     }
 
 
-def capture_screenshot(output: str, pointer: bool = False) -> Path:
-    out = Path(output).expanduser().resolve()
-    out.parent.mkdir(parents=True, exist_ok=True)
+def screenshot_commands(output: str, pointer: bool = False) -> list[list[str]]:
     commands: list[list[str]] = []
+    if session_type() == "wayland" and have("grim") and not pointer:
+        commands.append(["grim", output])
     if have("spectacle"):
-        cmd = ["spectacle", "-b", "-n", "-o", str(out)]
+        cmd = ["spectacle", "-b", "-n", "-o", output]
         if pointer:
             cmd.insert(3, "-p")
         commands.append(cmd)
-    if session_type() == "wayland" and have("grim"):
-        commands.append(["grim", str(out)])
+    if session_type() == "wayland" and have("grim") and pointer:
+        commands.append(["grim", output])
     if have("gnome-screenshot"):
-        commands.append(["gnome-screenshot", "-f", str(out)])
+        commands.append(["gnome-screenshot", "-f", output])
     if have("scrot"):
-        commands.append(["scrot", str(out)])
+        commands.append(["scrot", output])
     if have("maim"):
-        commands.append(["maim", str(out)])
+        commands.append(["maim", output])
     if have("import") and os.environ.get("DISPLAY"):
-        commands.append(["import", "-window", "root", str(out)])
+        commands.append(["import", "-window", "root", output])
+    return commands
+
+
+def capture_screenshot(output: str, pointer: bool = False) -> Path:
+    out = Path(output).expanduser().resolve()
+    out.parent.mkdir(parents=True, exist_ok=True)
+    commands = screenshot_commands(str(out), pointer)
     errors: list[str] = []
     for cmd in commands:
         proc = subprocess.run(cmd, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -634,10 +661,88 @@ def observation(output: str, pointer: bool = False) -> dict[str, object]:
     }
 
 
+def brief_observation(payload: dict[str, object]) -> dict[str, object]:
+    desktop_info = payload.get("desktop", {})
+    screenshot_info = payload.get("screenshot", {})
+    if not isinstance(desktop_info, dict):
+        desktop_info = {}
+    if not isinstance(screenshot_info, dict):
+        screenshot_info = {}
+    width = screenshot_info.get("width")
+    height = screenshot_info.get("height")
+    sha = str(screenshot_info.get("sha256", ""))
+    if desktop_info.get("uinput_writable"):
+        uinput = "rw"
+    elif desktop_info.get("uinput_readable"):
+        uinput = "ro"
+    elif desktop_info.get("uinput_exists"):
+        uinput = "no-write"
+    else:
+        uinput = "missing"
+    return {
+        "v": payload.get("version"),
+        "ms": payload.get("duration_ms"),
+        "desk": f"{desktop_info.get('session_type') or '?'}:{desktop_info.get('desktop') or '?'}",
+        "uinput": uinput,
+        "shot": screenshot_info.get("path"),
+        "size": f"{width}x{height}",
+        "bytes": screenshot_info.get("bytes"),
+        "sha": sha[:12],
+    }
+
+
+def brief_wait_change(payload: dict[str, object]) -> dict[str, object]:
+    screenshot_info = payload.get("screenshot", {})
+    if not isinstance(screenshot_info, dict):
+        screenshot_info = {}
+    width = screenshot_info.get("width")
+    height = screenshot_info.get("height")
+    return {
+        "changed": payload.get("changed"),
+        "tries": payload.get("attempts"),
+        "ms": payload.get("duration_ms"),
+        "shot": screenshot_info.get("path"),
+        "size": f"{width}x{height}",
+        "sha": str(screenshot_info.get("sha256", ""))[:12],
+    }
+
+
+def brief_sequence(payload: dict[str, object]) -> dict[str, object]:
+    events = []
+    for event in payload.get("events", []):
+        if not isinstance(event, dict):
+            continue
+        item: dict[str, object] = {
+            "i": event.get("index"),
+            "a": event.get("action"),
+            "ok": event.get("ok"),
+            "ms": event.get("duration_ms"),
+        }
+        if event.get("error"):
+            item["err"] = event["error"]
+        result = event.get("result")
+        if isinstance(result, dict):
+            if "screenshot" in result and isinstance(result["screenshot"], dict):
+                shot = result["screenshot"]
+                item["shot"] = shot.get("path")
+            elif "screenshot" in result:
+                item["result"] = result["screenshot"]
+            elif "path" in result:
+                item["path"] = result["path"]
+            elif "browser" in result:
+                item["browser"] = result.get("browser")
+                item["pid"] = result.get("pid")
+            elif "changed" in result:
+                item["changed"] = result.get("changed")
+        events.append(item)
+    return {"ok": payload.get("ok"), "events": events}
+
+
 def observe(args: argparse.Namespace) -> None:
     payload = observation(args.output, args.pointer)
     journal_event("observe", payload)
-    stdout_json(payload, pretty=not args.compact)
+    output = brief_observation(payload) if args.brief else payload
+    emit_json(output, compact=args.compact, brief=args.brief)
 
 
 def watch(args: argparse.Namespace) -> None:
@@ -653,7 +758,8 @@ def watch(args: argparse.Namespace) -> None:
             payload["index"] = index
             payload["changed"] = previous_hash is not None and current_hash != previous_hash
             journal_event("watch.frame", payload)
-            print(json.dumps(payload, sort_keys=True), flush=True)
+            output = brief_observation(payload) if args.brief else payload
+            print(json.dumps(output, sort_keys=True, separators=(",", ":") if args.brief else None), flush=True)
             previous_hash = current_hash
             index += 1
             if args.count == 0 or index < args.count:
@@ -694,7 +800,8 @@ def wait_change(timeout: float, interval: float, output: str, pointer: bool = Fa
 def wait_cmd(args: argparse.Namespace) -> None:
     payload = wait_change(args.timeout, args.interval, args.output, args.pointer)
     journal_event("wait-change", payload)
-    stdout_json(payload, pretty=not args.compact)
+    output = brief_wait_change(payload) if args.brief else payload
+    emit_json(output, compact=args.compact, brief=args.brief)
 
 
 def journal_cmd(args: argparse.Namespace) -> None:
@@ -1061,8 +1168,10 @@ def sequence_cmd(args: argparse.Namespace) -> None:
         events.append(event)
         if not event["ok"] and not args.continue_on_error:
             break
-    stdout_json({"ok": ok, "events": events}, pretty=not args.compact)
-    journal_event("sequence", {"ok": ok, "events": events})
+    payload = {"ok": ok, "events": events}
+    output = brief_sequence(payload) if args.brief else payload
+    emit_json(output, compact=args.compact, brief=args.brief)
+    journal_event("sequence", payload)
     if not ok:
         raise SystemExit(1)
 
@@ -1071,7 +1180,13 @@ MCP_TOOLS: list[dict[str, object]] = [
     {
         "name": "manifest",
         "description": "Return the agent-readable contract, safety model, capability map, and journal/Obsidian integration hints.",
-        "inputSchema": {"type": "object", "properties": {}},
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "brief": {"type": "boolean", "default": False},
+                "compact": {"type": "boolean", "default": False},
+            },
+        },
     },
     {
         "name": "observe",
@@ -1081,6 +1196,8 @@ MCP_TOOLS: list[dict[str, object]] = [
             "properties": {
                 "output": {"type": "string", "default": "/tmp/agent-linux-control-observe.png"},
                 "pointer": {"type": "boolean", "default": False},
+                "brief": {"type": "boolean", "default": False},
+                "compact": {"type": "boolean", "default": False},
             },
         },
     },
@@ -1145,6 +1262,8 @@ MCP_TOOLS: list[dict[str, object]] = [
             "properties": {
                 "steps": {"type": "array", "items": {"type": "object"}},
                 "output_dir": {"type": "string", "default": "/tmp/agent-linux-control-sequence"},
+                "brief": {"type": "boolean", "default": False},
+                "compact": {"type": "boolean", "default": False},
             },
             "required": ["steps"],
         },
@@ -1152,15 +1271,23 @@ MCP_TOOLS: list[dict[str, object]] = [
 ]
 
 
-def mcp_text(payload: object) -> dict[str, object]:
-    return {"content": [{"type": "text", "text": json.dumps(payload, indent=2, sort_keys=True)}]}
+def mcp_text(payload: object, compact: bool = False) -> dict[str, object]:
+    if compact:
+        text = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    else:
+        text = json.dumps(payload, indent=2, sort_keys=True)
+    return {"content": [{"type": "text", "text": text}]}
 
 
 def mcp_tool_call(name: str, arguments: dict[str, object]) -> dict[str, object]:
+    brief = bool(arguments.get("brief", False))
+    compact = bool(arguments.get("compact", brief))
     if name == "manifest":
-        return mcp_text(agent_manifest())
+        payload = brief_manifest() if brief else agent_manifest()
+        return mcp_text(payload, compact=compact)
     if name == "observe":
-        return mcp_text(observation(str(arguments.get("output") or "/tmp/agent-linux-control-observe.png"), bool(arguments.get("pointer", False))))
+        payload = observation(str(arguments.get("output") or "/tmp/agent-linux-control-observe.png"), bool(arguments.get("pointer", False)))
+        return mcp_text(brief_observation(payload) if brief else payload, compact=compact)
     if name == "click":
         step = {"action": "click", **arguments}
         return mcp_text(run_step(step, Path("/tmp/agent-linux-control-mcp"), 0))
@@ -1190,7 +1317,8 @@ def mcp_tool_call(name: str, arguments: dict[str, object]) -> dict[str, object]:
             if not isinstance(step, dict):
                 raise ValueError(f"sequence step {index} must be an object")
             events.append({"index": index, "result": run_step(step, output_dir, index)})
-        return mcp_text({"events": events})
+        payload = {"events": events}
+        return mcp_text(brief_sequence(payload) if brief else payload, compact=compact)
     raise ValueError(f"unknown MCP tool: {name}")
 
 
@@ -1264,6 +1392,7 @@ def main() -> None:
 
     p = sub.add_parser("manifest", help="print the agent-readable capability contract")
     p.add_argument("--compact", action="store_true", help="emit compact JSON")
+    p.add_argument("--brief", action="store_true", help="emit token-minimal agent contract")
     p.set_defaults(func=manifest_cmd)
 
     p = sub.add_parser("doctor", help="inspect desktop-control readiness")
@@ -1281,6 +1410,7 @@ def main() -> None:
     p.add_argument("--output", "-o", default="/tmp/agent-linux-control-observe.png")
     p.add_argument("--pointer", action="store_true")
     p.add_argument("--compact", action="store_true", help="emit compact JSON")
+    p.add_argument("--brief", action="store_true", help="emit token-minimal JSON")
     p.set_defaults(func=observe)
 
     p = sub.add_parser("watch", help="capture repeated observations as JSONL")
@@ -1289,6 +1419,7 @@ def main() -> None:
     p.add_argument("--interval", type=float, default=1.0)
     p.add_argument("--count", type=int, default=5, help="number of frames; 0 means until interrupted")
     p.add_argument("--pointer", action="store_true")
+    p.add_argument("--brief", action="store_true", help="emit token-minimal JSONL")
     p.set_defaults(func=watch)
 
     p = sub.add_parser("wait-change", help="wait until the visible screen changes")
@@ -1297,6 +1428,7 @@ def main() -> None:
     p.add_argument("--interval", type=float, default=0.5)
     p.add_argument("--pointer", action="store_true")
     p.add_argument("--compact", action="store_true", help="emit compact JSON")
+    p.add_argument("--brief", action="store_true", help="emit token-minimal JSON")
     p.set_defaults(func=wait_cmd)
 
     p = sub.add_parser("journal", help="inspect the privacy-safe event journal")
@@ -1391,6 +1523,7 @@ def main() -> None:
     p.add_argument("--output-dir", default="/tmp/agent-linux-control-sequence")
     p.add_argument("--continue-on-error", action="store_true")
     p.add_argument("--compact", action="store_true", help="emit compact JSON")
+    p.add_argument("--brief", action="store_true", help="emit token-minimal result JSON")
     p.set_defaults(func=sequence_cmd)
 
     p = sub.add_parser("mcp", help="run a small stdio MCP server for desktop-control tools")

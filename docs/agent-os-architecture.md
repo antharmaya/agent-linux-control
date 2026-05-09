@@ -12,6 +12,7 @@
 | Integration | Let agents call the same controls through structured tools | `mcp`, installed skills |
 | Journal | Preserve privacy-safe event traces for recovery and review | `journal` |
 | Brain map | Turn capabilities and validation into a graph workspace | `brain export` for Obsidian |
+| Token economy | Keep repeated agent loops compact and fast | `--brief`, compact skill text |
 
 ## Industry Pattern Without Vendor Lock-In
 
@@ -23,6 +24,7 @@ Public agent systems are converging on the same shape:
 - Subagents isolate focused work.
 - Memory and journals make work resumable.
 - Visual surfaces make state inspectable.
+- Token-efficient contracts keep agent loops snappy.
 
 This project should implement those ideas as portable Linux infrastructure rather than as a single vendor app shell.
 
@@ -30,6 +32,7 @@ This project should implement those ideas as portable Linux infrastructure rathe
 
 - Drivers: Wayland/X11 screenshot tools, `/dev/uinput`, clipboard tools, browser launchers.
 - Syscalls: `observe`, `click`, `paste`, `sequence`, `wait-change`.
+- Compact syscalls: `manifest --brief`, `observe --brief`, `sequence --brief`.
 - Scheduler: future action queues, retries, timeouts, and budgets.
 - Permissions: future policy engine for dangerous actions.
 - Audit log: privacy-safe JSONL journal.
@@ -43,3 +46,4 @@ This project should implement those ideas as portable Linux infrastructure rathe
 4. Add adaptive budgets for `sequence` and MCP calls.
 5. Add hook templates for Codex/Claude/OpenCode style workflows.
 6. Add Obsidian validation imports so test runs become graph nodes.
+7. Add optional Rust acceleration only after benchmarks show Python/screenshot orchestration is the bottleneck, not compositor capture time or model latency.

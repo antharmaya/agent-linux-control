@@ -35,16 +35,16 @@ On Raspberry Pi and other ARM Linux systems, the same installer path is used. Pa
 ## Use
 
 ```sh
-agent-linux-control manifest
+agent-linux-control manifest --brief
 agent-linux-control doctor
-agent-linux-control observe --output /tmp/screen.png
+agent-linux-control observe --brief --output /tmp/screen.png
 agent-linux-control click left --x 900 --y 600
 agent-linux-control paste "long text that should land cleanly"
 agent-linux-control hotkey ctrl+l
 agent-linux-control clipboard set "long text"
 agent-linux-control browser --prefer chrome https://reddit.com
 agent-linux-control browser --prefer chrome --require-prefer https://reddit.com
-agent-linux-control watch --count 10 --interval 0.5 --output-dir /tmp/alc-watch
+agent-linux-control watch --brief --count 10 --interval 0.5 --output-dir /tmp/alc-watch
 agent-linux-control journal tail --lines 5
 agent-linux-control brain export --output-dir ./agent-linux-control-vault
 ```
@@ -53,21 +53,23 @@ agent-linux-control brain export --output-dir ./agent-linux-control-vault
 
 Use the higher-level loop for smoother work:
 
-1. `agent-linux-control manifest`
-2. `agent-linux-control observe --output /tmp/alc-screen.png`
+1. `agent-linux-control manifest --brief`
+2. `agent-linux-control observe --brief --output /tmp/alc-screen.png`
 3. Inspect the screenshot in the host agent.
 4. Run one precise action or a batch:
 
 ```sh
-agent-linux-control sequence --file examples/sequence.browser-observe.json
+agent-linux-control sequence --brief --file examples/sequence.browser-observe.json
 ```
 
-5. Use `agent-linux-control wait-change` or `agent-linux-control observe` to verify the UI changed.
+5. Use `agent-linux-control wait-change --brief` or `agent-linux-control observe --brief` to verify the UI changed.
 6. Review `agent-linux-control journal tail` when an agent needs to recover or explain what happened.
 
 `sequence` accepts JSON steps such as `observe`, `browser`, `click`, `type`, `paste`, `hotkey`, `scroll`, `wait-change`, and `sleep`. Batching removes tool-call latency and makes the desktop feel closer to a realtime control surface. Browser steps accept `require_prefer: true` when the agent must fail instead of falling back to another browser.
 
-`manifest` is the machine-readable contract for first-class agents. It describes each capability, risk class, read-only status, recommended loop, journal behavior, and Obsidian export path.
+`manifest` is the machine-readable contract for first-class agents. It describes each capability, risk class, read-only status, recommended loop, journal behavior, and Obsidian export path. Add `--brief` to emit a compact contract for repeated agent loops.
+
+Use `--brief` as the default agent loop mode. It keeps stable keys and critical recovery data while dropping verbose descriptions. Use full JSON only for debugging or docs generation.
 
 `journal` writes privacy-safe JSONL events to `${XDG_STATE_HOME:-~/.local/state}/agent-linux-control/events.jsonl` by default. Text-like fields are stored as length and SHA-256, not raw content. Set `AGENT_LINUX_CONTROL_NO_JOURNAL=1` to disable it.
 
@@ -113,6 +115,7 @@ The MCP server exposes `manifest`, `observe`, `click`, `type`, `paste`, `hotkey`
 - `examples/` - ready-to-copy MCP and sequence configs.
 - `docs/research-2026.md` - product/research notes behind the agent experience.
 - `docs/agent-os-architecture.md` - OS-style architecture for first-class agent integrations.
+- `docs/performance-token-economy.md` - brief payload and optional Rust acceleration criteria.
 - `adapters/` - notes for Codex, Claude Code, Gemini CLI, OpenCode, Zen/browser targets, Pi/ARM Linux, and other agents.
 
 ## Safety
