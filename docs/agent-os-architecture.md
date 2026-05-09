@@ -40,10 +40,11 @@ This project should implement those ideas as portable Linux infrastructure rathe
 
 ## Next First-Class Upgrades
 
-1. Add window/app discovery: `window-list`, `active-window`, `focus`.
-2. Add policy enforcement: `policy check`, `policy run`, deny rules for secrets and destructive UI.
-3. Add structured error taxonomy so agents can self-recover deterministically.
-4. Add adaptive budgets for `sequence` and MCP calls.
-5. Add hook templates for Codex/Claude/OpenCode style workflows.
-6. Add Obsidian validation imports so test runs become graph nodes.
-7. Add optional Rust acceleration only after benchmarks show Python/screenshot orchestration is the bottleneck, not compositor capture time or model latency.
+1. Move realtime core to Rust: `alc-core`, `alc`, future `alc-daemon`.
+2. Add persistent uinput daemon with Unix socket.
+3. Add workspace isolation: nested compositor, VNC/xpra, app-native adapters.
+4. Add dialog detection/recipes for app modals.
+5. Add window/app discovery: `window-list`, `active-window`, `focus`.
+6. Add structured error taxonomy so agents can self-recover deterministically.
+7. Add adaptive budgets for `sequence` and MCP calls.
+8. Add hook templates for Codex/Claude/OpenCode style workflows.

@@ -49,6 +49,13 @@ agent-linux-control journal tail --lines 5
 agent-linux-control brain export --output-dir ./agent-linux-control-vault
 ```
 
+Rust prototype:
+
+```sh
+cargo run -q -p alc -- manifest --compact
+cargo run -q -p alc -- bench-summary 10 20 30
+```
+
 ## Agent Loop
 
 Use the higher-level loop for smoother work:
@@ -109,6 +116,7 @@ The MCP server exposes `manifest`, `observe`, `click`, `type`, `paste`, `hotkey`
 ## Project Layout
 
 - `bin/agent-linux-control` - Python stdlib CLI; no daemon required.
+- `crates/` - Rust rewrite workspace; currently `alc-core` models and `alc` CLI prototype.
 - `install.sh` - curl-friendly installer.
 - `skills/agent-linux-control/SKILL.md` - portable skill for agents.
 - `plugins/agent-linux-control/` - Codex plugin wrapper around the skill.
@@ -119,6 +127,7 @@ The MCP server exposes `manifest`, `observe`, `click`, `type`, `paste`, `hotkey`
 - `docs/workspace-isolation.md` - direct desktop vs nested/remote workspace model.
 - `docs/dialog-handling.md` - recipes for onboarding, file pickers, permission prompts, and app modals.
 - `docs/benchmarks-2026-05-10.md` - current Fedora/KDE/Blender timing evidence.
+- `docs/rust-pivot.md` - Rust migration plan and crate architecture.
 - `adapters/` - notes for Codex, Claude Code, Gemini CLI, OpenCode, Zen/browser targets, Pi/ARM Linux, and other agents.
 
 ## Safety

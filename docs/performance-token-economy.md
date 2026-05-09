@@ -32,9 +32,9 @@ Goal: make Linux desktop control feel realtime without wasting model context.
 
 Interpretation: app-native APIs are fast once app is loaded. Current bottlenecks are screenshot capture, per-process startup, and per-device input setup. Batching input actions is already a large win.
 
-## Rust Rule
+## Rust Pivot
 
-Do not add Rust because it feels fast. Add Rust when benchmark says Python is bottleneck.
+Rust pivot is now active. Keep Python stdlib CLI as compatibility/install path while Rust becomes realtime engine.
 
 Candidate Rust targets:
 
@@ -43,13 +43,13 @@ Candidate Rust targets:
 - Native screenshot diff/hash pipeline if compositor capture is not bottleneck.
 - Optional daemon with Unix socket for sub-50ms command dispatch.
 
-Keep Python stdlib CLI as stable installer path. Rust should be optional acceleration, not required install path.
+Keep Python stdlib CLI as stable installer path until Rust reaches command parity.
 
 ## Pivot Rule
 
-Short term: optimize Python CLI with batching, app-native adapters, and isolated workspaces.
+Short term: Rust core models + CLI prototype, Python compatibility, batching, app-native adapters, isolated workspaces.
 
-Medium term: add optional daemon. Rust is a strong fit for persistent uinput, event loop, socket protocol, and high-frequency watch/diff. Python remains installer/default control plane.
+Medium term: Rust daemon. Rust is a strong fit for persistent uinput, event loop, socket protocol, and high-frequency watch/diff. Python remains fallback control plane.
 
 ## Benchmarks To Add
 
